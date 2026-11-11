@@ -13,7 +13,10 @@ data class LocalSong(
     val artist: String,
     val album: String,
     val duration: Long,
-    val uri: Uri
+    val uri: Uri,
+    val folder: String = "Unknown folder",
+    val genre: String = "Unknown genre",
+    val year: Int = 0
 )
 
 suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Dispatchers.IO) {
@@ -22,7 +25,9 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
     val columns = arrayOf(
         MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
         MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
-        MediaStore.Audio.Media.DURATION
+        MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.DATA,
+        MediaStore.Audio.Media.YEAR
     )
     context.contentResolver.query(
         collection, columns,
@@ -34,6 +39,8 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         val artist = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
         val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
         val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+        val pathIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+        val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
         while (cursor.moveToNext()) {
             val songId = cursor.getLong(id)
             songs += LocalSong(
@@ -42,7 +49,9 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                 cursor.getString(artist) ?: "Unknown artist",
                 cursor.getString(album) ?: "Unknown album",
                 cursor.getLong(duration),
-                ContentUris.withAppendedId(collection, songId)
+                ContentUris.withAppendedId(collection, songId),
+                folder = cursor.getString(pathIndex)?.substringBeforeLast('/')?.substringAfterLast('/') ?: "Unknown folder",
+                year = if(cursor.isNull(yearIndex))0 else cursor.getInt(yearIndex)
             )
         }
     }
