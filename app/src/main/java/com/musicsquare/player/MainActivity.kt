@@ -119,6 +119,7 @@ private fun PlayerApp(controller: MediaController?) {
     var current by remember { mutableStateOf<LocalSong?>(null) }
     var playing by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
+    var playbackSpeed by remember { mutableFloatStateOf(1f) }
     var assignSong by remember { mutableStateOf<LocalSong?>(null) }
     var assignmentsVersion by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
@@ -367,6 +368,8 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }) { Icon(Icons.Default.Share,"Share",tint=Color.White) }
                         }
+                        Text("Playback speed: ${"%.2f".format(java.util.Locale.US,playbackSpeed)}×",color=muted)
+                        Slider(value=playbackSpeed,onValueChange={playbackSpeed=it;controller?.setPlaybackSpeed(it)},valueRange=0.5f..2f)
                         current?.let { song -> Text("Mood: ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",color=muted) }
                     }
                     else -> {
