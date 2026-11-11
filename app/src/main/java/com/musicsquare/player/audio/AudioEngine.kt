@@ -46,6 +46,8 @@ class AudioEngine(private val context:Context) {
     require(edit.startSeconds>=0)
     require(edit.endSeconds==null || edit.endSeconds>edit.startSeconds)
     require(edit.removeRanges.size<=32)
+    require(edit.removeRanges.all { it.first>=0 && it.second>it.first })
+    require(edit.removeRanges.all { edit.endSeconds==null || it.first<edit.endSeconds })
     val input=File.createTempFile("audio_input_",".tmp",context.cacheDir)
     val output=File.createTempFile("audio_output_",".${format.ext}",context.cacheDir)
     try {
@@ -65,21 +67,18 @@ class AudioEngine(private val context:Context) {
       val keep=edit.removeRanges.filter { it.second>it.first && it.second>base }
        .sortedBy { it.first }
       var cursor=base
-      val segments=mutableListOf<Pair<Double,Double?>>()
       for((a,b) in keep) {
-       if(a>cursor)segments+=(cursor to a)
        cursor=maxOf(cursor,b)
       }
-      segments+=(cursor to edit.endSeconds)
       // select expression removes arbitrary intervals in original timeline.
       // Apply before atrim; replace the previous trimming filters.
       filters.clear()
-      val excludes=keep.joinToString("+") { "between(t,${it.first},${it.second})" }
+      val excludes=keep.joinToString("+") { "between(t\\,${it.first}\\,${it.second})" }
       if(excludes.isNotEmpty())filters+="aselect=not($excludes)"
       if(edit.startSeconds>0 || edit.endSeconds!=null) {
        val cond=mutableListOf<String>()
-       if(edit.startSeconds>0)cond+="gte(t,${edit.startSeconds})"
-       edit.endSeconds?.let { cond+="lt(t,$it)" }
+       if(edit.startSeconds>0)cond+="gte(t\\,${edit.startSeconds})"
+       edit.endSeconds?.let { cond+="lt(t\\,$it)" }
        filters+="aselect=${cond.joinToString("*")}"
       }
       filters+="asetpts=N/SR/TB"
@@ -111,7 +110,7 @@ class AudioEngine(private val context:Context) {
       if(format in listOf(Format.MP3,Format.M4A,Format.OGG))
        command+=listOf("-b:a","${bitrate}k")
      }
-     command+=listOf("-vn",output.absolutePath)
+     command+=listOf("-vn","-map_metadata","0",output.absolutePath)
      // FFmpegKit argument API avoids shell escaping and injection.
      val session=FFmpegKit.executeWithArguments(command.toTypedArray())
      require(ReturnCode.isSuccess(session.returnCode)) {
