@@ -94,6 +94,9 @@ private fun PlayerApp(controller: MediaController?) {
     var tagExportSource by remember { mutableStateOf<Uri?>(null) }
     var tagExportStatus by remember { mutableStateOf<String?>(null) }
     var wavSource by remember { mutableStateOf<Uri?>(null) }
+    var cutterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
+    var cutterBitrate by remember { mutableIntStateOf(192) }
+    var cutterPitch by remember { mutableStateOf(true) }
     var wavStart by remember { mutableStateOf("0") }
     var wavEnd by remember { mutableStateOf("") }
     var wavRemoveRanges by remember { mutableStateOf("") }
@@ -172,6 +175,27 @@ private fun PlayerApp(controller: MediaController?) {
         }
     }
     val wavPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { wavSource=it }
+    val cutterSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { dest ->
+        val src=wavSource
+        if(src!=null && dest!=null)scope.launch {
+            wavBusy=true
+            val ranges=wavRemoveRanges.split(",").mapNotNull { part ->
+                val t=part.trim().split("-");if(t.size!=2)null else {
+                    val a=t[0].trim().toDoubleOrNull();val b=t[1].trim().toDoubleOrNull()
+                    if(a!=null && b!=null && a>=0 && b>a)a to b else null
+                }
+            }
+            val result=audioEngine.convert(src,dest,cutterFormat,cutterBitrate,AudioEngine.Edit(
+                startSeconds=wavStart.toDoubleOrNull() ?: 0.0,
+                endSeconds=wavEnd.toDoubleOrNull(),removeRanges=ranges,
+                silenceSeconds=if(wavRemoveSilence)wavSilenceSeconds.toDoubleOrNull() ?: 1.5 else null,
+                speed=wavSpeed.toDouble(),preservePitch=cutterPitch
+            ))
+            wavStatus=result.fold(onSuccess={"Edited audio saved"},onFailure={it.message ?: "Audio edit failed"})
+            wavBusy=false
+            refresh()
+        }
+    }
     val wavSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { dest ->
         val src=wavSource
         if(src!=null && dest!=null) scope.launch {
