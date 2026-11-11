@@ -55,7 +55,24 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
             )
         }
     }
-    songs
+    val genreMap = mutableMapOf<Long,String>()
+    context.contentResolver.query(MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+        arrayOf(MediaStore.Audio.Genres._ID,MediaStore.Audio.Genres.NAME),null,null,null)?.use { genres ->
+        val gid=genres.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+        val gname=genres.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+        while(genres.moveToNext()) {
+            val id=genres.getLong(gid)
+            val name=genres.getString(gname) ?: continue
+            runCatching {
+                context.contentResolver.query(MediaStore.Audio.Genres.Members.getContentUri("external",id),
+                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),null,null,null)?.use { members ->
+                    val aid=members.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                    while(members.moveToNext()) genreMap[members.getLong(aid)]=name
+                }
+            }
+        }
+    }
+    songs.map { it.copy(genre=genreMap[it.id] ?: "Unknown genre") }
 }
 
 class MoodStore(context: Context) {
