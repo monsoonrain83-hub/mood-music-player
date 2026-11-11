@@ -110,7 +110,7 @@ class AudioEngine(private val context:Context) {
       if(format in listOf(Format.MP3,Format.M4A,Format.OGG))
        command+=listOf("-b:a","${bitrate}k")
      }
-     command+=listOf("-vn","-map_metadata","0",output.absolutePath)
+     command+=listOf("-vn",output.absolutePath)
      // FFmpegKit argument API avoids shell escaping and injection.
      val session=FFmpegKit.executeWithArguments(command.toTypedArray())
      require(ReturnCode.isSuccess(session.returnCode)) {
