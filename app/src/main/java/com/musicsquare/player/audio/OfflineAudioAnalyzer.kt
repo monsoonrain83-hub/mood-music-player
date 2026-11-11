@@ -80,7 +80,8 @@ class OfflineAudioAnalyzer(private val context: Context) {
                             output.limit(info.offset + info.size)
                             val pcm = output.slice().order(java.nio.ByteOrder.LITTLE_ENDIAN)
                             // Most Android PCM decoders emit signed 16-bit audio.
-                            val encoding = decoder.outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                            val outputFormat = decoder.outputFormat
+                            val encoding = if (outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) else android.media.AudioFormat.ENCODING_PCM_16BIT
                             if (encoding == android.media.AudioFormat.ENCODING_PCM_16BIT) {
                                 while (pcm.remaining() >= 2 && totalSamples < maxSamples) {
                                     val sample = pcm.short.toDouble() / 32768.0
