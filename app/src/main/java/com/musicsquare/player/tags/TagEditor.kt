@@ -26,7 +26,7 @@ data class TagResult(val uri:Uri,val success:Boolean,val message:String)
  * The SAF provider must grant write access. Backups are temporary per file.
  */
 class TagEditor(private val context:Context) {
- suspend fun writeBatch(uris:List<Uri>,changes:TagChanges,onProgress:(Int,Int)->Unit={}):List<TagResult> =
+ suspend fun writeBatch(uris:List<Uri>,changes:TagChanges,onProgress:(Int,Int)->Unit={ _, _ -> }):List<TagResult> =
   withContext(Dispatchers.IO) {
    uris.mapIndexed { index,uri ->
     val result=writeOne(uri,changes)
