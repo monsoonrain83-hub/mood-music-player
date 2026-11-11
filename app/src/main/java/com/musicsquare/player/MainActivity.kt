@@ -86,6 +86,9 @@ private fun PlayerApp(controller: MediaController?) {
     var position by remember { mutableLongStateOf(0L) }
     var assignSong by remember { mutableStateOf<LocalSong?>(null) }
     var assignmentsVersion by remember { mutableIntStateOf(0) }
+    var searchQuery by remember { mutableStateOf("") }
+    var favoritesVersion by remember { mutableIntStateOf(0) }
+    val favorites = remember { context.getSharedPreferences("favorites", android.content.Context.MODE_PRIVATE) }
     val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     var allowed by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) }
     fun refresh() {
@@ -192,6 +195,7 @@ private fun PlayerApp(controller: MediaController?) {
                             TextButton(onClick={if(allowed)refresh() else request.launch(permission)}) { Text("Refresh") }
                         }
                         if (!allowed) Button(onClick={request.launch(permission)}) { Text("Allow music access") }
+                        OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
                             scope.launch {
@@ -210,7 +214,7 @@ private fun PlayerApp(controller: MediaController?) {
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            items(songs,key={it.id}) { song ->
+                            items(songs.filter { searchQuery.isBlank() || it.title.contains(searchQuery,true) || it.artist.contains(searchQuery,true) || it.album.contains(searchQuery,true) },key={it.id}) { song ->
                                 Row(Modifier.fillMaxWidth().clickable { play(songs,songs.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                                     Icon(Icons.Default.MusicNote,null,tint=accent,modifier=Modifier.size(36.dp))
                                     Spacer(Modifier.width(10.dp))
@@ -218,6 +222,11 @@ private fun PlayerApp(controller: MediaController?) {
                                         Text(song.title,color=Color.White,maxLines=1,overflow=TextOverflow.Ellipsis)
                                         Text("${song.artist} • ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
                                     }
+                                    IconButton(onClick={
+                                        val key=song.id.toString()
+                                        favorites.edit().putBoolean(key,!favorites.getBoolean(key,false)).apply()
+                                        favoritesVersion++
+                                    }) { Icon(if(favorites.getBoolean(song.id.toString(),false)) Icons.Default.Favorite else Icons.Default.FavoriteBorder,"Favorite",tint=accent) }
                                     TextButton(onClick={assignSong=song}) { Text("Mood") }
                                 }
                             }
@@ -255,6 +264,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Settings",fontSize=30.sp,color=Color.White,fontWeight=FontWeight.Bold)
                         Spacer(Modifier.height(20.dp))
                         Text("Offline-first • Local playback",color=muted)
+                        Text("Favorites: ${songs.count { favorites.getBoolean(it.id.toString(),false) } + (favoritesVersion * 0)}",color=muted)
                         Text("No account or internet required.",color=muted)
                         Spacer(Modifier.height(12.dp))
                         Text("MusicSquare Player 0.2.0",color=Color.White)
