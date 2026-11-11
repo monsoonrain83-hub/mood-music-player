@@ -67,18 +67,19 @@ class LyricsRepository(private val context:Context) {
    if(album.isNotBlank())params+="album_name" to album
    if(durationMs in 1000..3_600_000)params+="duration" to (durationMs/1000).toString()
    val query=params.joinToString("&") { (k,v)->"$k=${URLEncoder.encode(v,"UTF-8")}" }
-   val connection=(URL("https://lrclib.net/api/get?$query").openConnection() as HttpURLConnection)
-   connection.connectTimeout=6000
-   connection.readTimeout=6000
-   connection.setRequestProperty("User-Agent","MusicSquarePlayer/0.3 (https://github.com/monsoonrain83-hub/mood-music-player)")
+   var connection:HttpURLConnection?=null
    try {
+    connection=(URL("https://lrclib.net/api/get?$query").openConnection() as HttpURLConnection)
+    connection.connectTimeout=6000
+    connection.readTimeout=6000
+    connection.setRequestProperty("User-Agent","MusicSquarePlayer/0.3 (https://github.com/monsoonrain83-hub/mood-music-player)")
     if(connection.responseCode!=200)return@withContext null
     val raw=connection.inputStream.bufferedReader().use { it.readText() }
     val decoded=decode(raw,"LRCLIB") ?: return@withContext null
     prefs.edit().putString(cacheKey,raw).apply()
     decoded
    } catch(_:Exception) { null }
-   finally { connection.disconnect() }
+   finally { connection?.disconnect() }
   }
  private fun decode(raw:String,source:String):Lyrics?=runCatching {
   val obj=JSONObject(raw)
