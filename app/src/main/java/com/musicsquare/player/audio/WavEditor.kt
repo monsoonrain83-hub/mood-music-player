@@ -21,7 +21,8 @@ data class WavEdit(
  val removeSilence:Boolean=false,
  val minSilenceMs:Int=1500,
  val thresholdDb:Double=-42.0,
- val speed:Double=1.0
+ val speed:Double=1.0,
+ val removeRangesMs:List<Pair<Long,Long>> = emptyList()
 )
 data class WavInfo(val channels:Int,val sampleRate:Int,val frames:Int,val pcm:ShortArray)
 
@@ -35,7 +36,8 @@ class WavEditor(private val context:Context) {
    val start=((options.startMs*wav.sampleRate)/1000).toInt().coerceIn(0,wav.frames)
    val end=((options.endMs?.times(wav.sampleRate)?.div(1000))?.toInt() ?: wav.frames).coerceIn(start,wav.frames)
    val clipped=wav.pcm.copyOfRange(start*wav.channels,end*wav.channels)
-   val filtered=if(options.removeSilence) removeSilences(clipped,wav.channels,wav.sampleRate,options.minSilenceMs,options.thresholdDb) else clipped
+   val withoutRanges=removeRanges(clipped,wav.channels,wav.sampleRate,options.removeRangesMs,options.startMs)
+   val filtered=if(options.removeSilence) removeSilences(withoutRanges,wav.channels,wav.sampleRate,options.minSilenceMs,options.thresholdDb) else withoutRanges
    val output=if(options.speed==1.0)filtered else resample(filtered,wav.channels,options.speed)
    context.contentResolver.openOutputStream(destination,"wt")?.use { writeWav(it,wav.channels,wav.sampleRate,output) }
     ?: error("Destination cannot be opened for writing")
@@ -86,6 +88,18 @@ class WavEditor(private val context:Context) {
  private fun skipFully(input:DataInputStream,bytes:Int) {
   var left=bytes
   while(left>0) { val n=input.skipBytes(left);if(n<=0)throw EOFException();left-=n }
+ }
+ private fun removeRanges(data:ShortArray,channels:Int,rate:Int,ranges:List<Pair<Long,Long>>,startMs:Long):ShortArray {
+  if(ranges.isEmpty())return data
+  val frames=data.size/channels
+  val output=ShortArray(data.size)
+  var written=0
+  for(frame in 0 until frames) {
+   val timeMs=startMs+frame*1000L/rate
+   if(ranges.any { timeMs>=it.first && timeMs<it.second })continue
+   for(ch in 0 until channels)output[written++]=data[frame*channels+ch]
+  }
+  return output.copyOf(written)
  }
  private fun removeSilences(data:ShortArray,channels:Int,rate:Int,minMs:Int,thresholdDb:Double):ShortArray {
   val frames=data.size/channels
