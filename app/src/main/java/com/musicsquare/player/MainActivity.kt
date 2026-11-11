@@ -146,6 +146,10 @@ private fun PlayerApp(controller: MediaController?) {
     var playing by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
+    var sleepMinutes by remember { mutableIntStateOf(0) }
+    var sleepRemaining by remember { mutableLongStateOf(0L) }
+    var shuffleOn by remember { mutableStateOf(false) }
+    var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
     var assignSong by remember { mutableStateOf<LocalSong?>(null) }
     var assignmentsVersion by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
@@ -269,10 +273,15 @@ private fun PlayerApp(controller: MediaController?) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-                current = songs.firstOrNull { it.uri.toString() == item?.localConfiguration?.uri.toString() }
+                val matched=songs.firstOrNull { it.id.toString()==item?.mediaId }
+                if(matched!=null && matched.id!=current?.id) {
+                    current=matched
+                    extras.played(matched.id)
+                }
             }
         }
         controller?.addListener(listener)
+        controller?.currentMediaItem?.let { item -> current=songs.firstOrNull { it.id.toString()==item.mediaId } ?: current }
         onDispose { controller?.removeListener(listener) }
     }
     LaunchedEffect(controller, songs) {
@@ -280,6 +289,17 @@ private fun PlayerApp(controller: MediaController?) {
             position = controller?.currentPosition?.coerceAtLeast(0) ?: 0L
             kotlinx.coroutines.delay(500)
         }
+    }
+    LaunchedEffect(sleepMinutes) {
+        if(sleepMinutes>0) {
+            sleepRemaining=sleepMinutes*60L
+            while(sleepRemaining>0L) {
+                kotlinx.coroutines.delay(1000)
+                sleepRemaining--
+            }
+            controller?.pause()
+            sleepMinutes=0
+        } else sleepRemaining=0
     }
     LaunchedEffect(current?.id) {
         val song=current
@@ -497,6 +517,17 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }) { Icon(Icons.Default.Share,"Share",tint=Color.White) }
                         }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
+                            TextButton(onClick={shuffleOn=!shuffleOn;controller?.shuffleModeEnabled=shuffleOn}) { Text(if(shuffleOn)"Shuffle On" else "Shuffle Off") }
+                            TextButton(onClick={repeatMode=when(repeatMode) { Player.REPEAT_MODE_OFF->Player.REPEAT_MODE_ALL;Player.REPEAT_MODE_ALL->Player.REPEAT_MODE_ONE;else->Player.REPEAT_MODE_OFF };controller?.repeatMode=repeatMode}) { Text(when(repeatMode){Player.REPEAT_MODE_ONE->"Repeat One";Player.REPEAT_MODE_ALL->"Repeat All";else->"Repeat Off"}) }
+                        }
+                        Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
+                            Text("Sleep timer",color=muted)
+                            listOf(0,15,30,45,60).forEach { min ->
+                                FilterChip(selected=sleepMinutes==min,onClick={sleepMinutes=min},label={Text(if(min==0)"Off" else "${min}m")})
+                            }
+                        }
+                        if(sleepRemaining>0)Text("Stopping in ${sleepRemaining/60}m ${sleepRemaining%60}s",color=muted,fontSize=12.sp)
                         Text("Playback speed: ${"%.2f".format(java.util.Locale.US,playbackSpeed)}×",color=muted)
                         Slider(value=playbackSpeed,onValueChange={playbackSpeed=it;controller?.setPlaybackSpeed(it)},valueRange=0.5f..2f)
                         if(lyricsExpanded) {
