@@ -75,12 +75,12 @@ class AudioEngine(private val context:Context) {
       // Apply before atrim; replace the previous trimming filters.
       filters.clear()
       val excludes=keep.joinToString("+") { "between(t,${it.first},${it.second})" }
-      if(excludes.isNotEmpty())filters+="aselect='not($excludes)'"
+      if(excludes.isNotEmpty())filters+="aselect=not($excludes)"
       if(edit.startSeconds>0 || edit.endSeconds!=null) {
        val cond=mutableListOf<String>()
        if(edit.startSeconds>0)cond+="gte(t,${edit.startSeconds})"
        edit.endSeconds?.let { cond+="lt(t,$it)" }
-       filters+="aselect='${cond.joinToString("*")}'"
+       filters+="aselect=${cond.joinToString("*")}"
       }
       filters+="asetpts=N/SR/TB"
      }
