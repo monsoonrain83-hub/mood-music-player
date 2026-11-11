@@ -47,6 +47,17 @@ class LyricsRepository(private val context:Context) {
  fun saveLrc(title:String,artist:String,duration:Long,lrc:String) {
   prefs.edit().putString(key(title,artist,duration),JSONObject().put("syncedLyrics",lrc).toString()).apply()
  }
+ fun savePlain(title:String,artist:String,duration:Long,plain:String) {
+  prefs.edit().putString(key(title,artist,duration),JSONObject().put("plainLyrics",plain).toString()).apply()
+ }
+ fun exportLrc(title:String,artist:String,duration:Long):String? {
+  val result=saved(title,artist,duration) ?: return null
+  if(result.lines.isEmpty())return null
+  return result.lines.joinToString("\\n") { line ->
+   val min=line.atMs/60000;val sec=(line.atMs/1000)%60;val cent=(line.atMs%1000)/10
+   "[%02d:%02d.%02d] %s".format(java.util.Locale.US,min,sec,cent,line.text)
+  }
+ }
  suspend fun fetch(title:String,artist:String,album:String,durationMs:Long):Lyrics? =
   withContext(Dispatchers.IO) {
    val cacheKey=key(title,artist,durationMs)
