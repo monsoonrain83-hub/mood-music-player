@@ -15,6 +15,8 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -326,7 +328,7 @@ private fun PlayerApp(controller: MediaController?) {
             }
         }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
-            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings" || screen=="Now") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 Spacer(Modifier.height(18.dp))
                 when(screen) {
                     "Square" -> {
@@ -464,7 +466,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     val line=lyrics?.currentLine(position)
                                     Text(line ?: if(lyricsLoading)"Searching lyrics..." else if(lyrics?.plain!=null)"Lyrics available — tap to read" else "Lyrics not available",color=Color.White,maxLines=if(lyricsExpanded)Int.MAX_VALUE else 1,overflow=TextOverflow.Ellipsis)
                                     if(lyricsExpanded) {
-                                        val content=lyrics?.plain ?: lyrics?.lines?.joinToString("\\n") { it.text } ?: "No lyrics found"
+                                        val content=lyrics?.plain ?: lyrics?.lines?.joinToString("\n") { it.text } ?: "No lyrics found"
                                         Text(content,color=muted,fontSize=13.sp,modifier=Modifier.heightIn(max=180.dp).verticalScroll(rememberScrollState()))
                                         Text(lyrics?.source ?: "",color=accent,fontSize=11.sp)
                                     }
