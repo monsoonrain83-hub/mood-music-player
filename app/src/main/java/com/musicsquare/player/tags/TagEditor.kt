@@ -8,6 +8,8 @@ import com.mpatric.mp3agic.ID3v24Tag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import android.provider.OpenableColumns
+import com.musicsquare.player.audio.AudioEngine
 
 data class TagChanges(
  val title:String?=null,
@@ -26,6 +28,13 @@ data class TagResult(val uri:Uri,val success:Boolean,val message:String)
  * The SAF provider must grant write access. Backups are temporary per file.
  */
 class TagEditor(private val context:Context) {
+ private val engine=AudioEngine(context)
+ private fun format(uri:Uri):AudioEngine.Format? {
+  val name=context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { cursor ->
+   if(cursor.moveToFirst())cursor.getString(0) else null
+  } ?: uri.lastPathSegment.orEmpty()
+  return AudioEngine.Format.entries.firstOrNull { name.endsWith(".${it.ext}",ignoreCase=true) }
+ }
  suspend fun writeBatch(uris:List<Uri>,changes:TagChanges,onProgress:(Int,Int)->Unit={ _, _ -> }):List<TagResult> =
   withContext(Dispatchers.IO) {
    uris.mapIndexed { index,uri ->
@@ -35,7 +44,12 @@ class TagEditor(private val context:Context) {
    }
   }
 
- private fun writeOne(uri:Uri,changes:TagChanges):TagResult {
+ private suspend fun writeOne(uri:Uri,changes:TagChanges):TagResult {
+  val fmt=format(uri) ?: return TagResult(uri,false,"Unsupported format; use MP3, WAV, FLAC, OGG or M4A")
+  if(fmt!=AudioEngine.Format.MP3) {
+   val result=engine.writeTags(uri,uri,fmt,AudioEngine.Metadata(changes.title,changes.artist,changes.album,changes.year,changes.genre,changes.track,changes.comment))
+   return result.fold({TagResult(uri,true,"Embedded metadata updated")},{TagResult(uri,false,it.message ?: "Tag write failed")})
+  }
   val source=File.createTempFile("tag_source_",".mp3",context.cacheDir)
   val modified=File.createTempFile("tag_modified_",".mp3",context.cacheDir)
   try {
