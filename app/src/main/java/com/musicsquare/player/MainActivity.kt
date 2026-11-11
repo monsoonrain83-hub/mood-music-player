@@ -34,6 +34,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicsquare.player.audio.OfflineAudioAnalyzer
+import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
@@ -83,6 +84,13 @@ private fun PlayerApp(controller: MediaController?) {
     val extras = remember { LibraryExtras(context) }
     val tagEditor = remember { TagEditor(context) }
     val wavEditor = remember { WavEditor(context) }
+    val audioEngine = remember { AudioEngine(context) }
+    var converterSource by remember { mutableStateOf<Uri?>(null) }
+    var converterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
+    var converterBitrate by remember { mutableIntStateOf(192) }
+    var converterStatus by remember { mutableStateOf<String?>(null) }
+    var converterBusy by remember { mutableStateOf(false) }
+    var tagFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var wavSource by remember { mutableStateOf<Uri?>(null) }
     var wavStart by remember { mutableStateOf("0") }
     var wavEnd by remember { mutableStateOf("") }
@@ -134,6 +142,17 @@ private fun PlayerApp(controller: MediaController?) {
             try { songs = scanLocalMusic(context); error = null }
             catch (e: Exception) { error = e.localizedMessage ?: "Unable to scan music" }
             finally { loading = false }
+        }
+    }
+    val converterPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { converterSource=it }
+    val converterSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { dest ->
+        val src=converterSource
+        if(src!=null && dest!=null)scope.launch {
+            converterBusy=true
+            val result=audioEngine.convert(src,dest,converterFormat,converterBitrate)
+            converterStatus=result.fold(onSuccess={"Converted file saved"},onFailure={it.message ?: "Conversion failed"})
+            converterBusy=false
+            refresh()
         }
     }
     val wavPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { wavSource=it }
