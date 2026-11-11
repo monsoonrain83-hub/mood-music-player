@@ -33,6 +33,8 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.musicsquare.player.audio.OfflineAudioAnalyzer
+import com.musicsquare.player.data.AnalysisStore
 import com.musicsquare.player.data.LocalSong
 import com.musicsquare.player.data.MoodStore
 import com.musicsquare.player.data.scanLocalMusic
@@ -70,6 +72,10 @@ private fun PlayerApp(controller: MediaController?) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { MoodStore(context) }
+    val analysisStore = remember { AnalysisStore(context) }
+    val analyzer = remember { OfflineAudioAnalyzer(context) }
+    var analysisProgress by remember { mutableStateOf<String?>(null) }
+    var analyzed by remember { mutableIntStateOf(0) }
     var songs by remember { mutableStateOf<List<LocalSong>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -171,7 +177,7 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         Spacer(Modifier.height(20.dp))
                         Text(if(selectedCell<0)"Select a mood cell" else names[selectedCell],fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
-                        Text("Songs are assigned manually until reliable offline mood analysis is available.",color=muted,fontSize=12.sp)
+                        Text("Energy and BPM are estimated offline. Mood valence needs manual labeling.",color=muted,fontSize=12.sp)
                         Spacer(Modifier.height(12.dp))
                         Button(enabled=selectedCell>=0 && songs.any { store.cell(it.id)==selectedCell } && controller!=null,
                             onClick={play(songs.filter { store.cell(it.id)==selectedCell })},modifier=Modifier.fillMaxWidth()) {
@@ -187,6 +193,21 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         if (!allowed) Button(onClick={request.launch(permission)}) { Text("Allow music access") }
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
+                            scope.launch {
+                                analysisProgress="Analyzing local tracks…"
+                                analyzed=0
+                                for ((index,song) in songs.withIndex()) {
+                                    analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
+                                    if (analysisStore.read(song.id,song.duration)==null) {
+                                        analyzer.analyze(song.uri)?.let { analysisStore.save(song.id,song.duration,it); analyzed++ }
+                                    }
+                                }
+                                analysisProgress=null
+                            }
+                        }) { Text("Analyze BPM + energy offline") }
+                        analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
+                        if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             items(songs,key={it.id}) { song ->
@@ -195,7 +216,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(song.title,color=Color.White,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                        Text("${song.artist} • ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",fontSize=12.sp,color=muted,maxLines=1)
+                                        Text("${song.artist} • ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
                                     }
                                     TextButton(onClick={assignSong=song}) { Text("Mood") }
                                 }
