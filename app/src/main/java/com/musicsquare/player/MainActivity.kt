@@ -182,7 +182,7 @@ private fun PlayerApp(controller: MediaController?) {
                 }
             }
         }) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).padding(horizontal=18.dp)) {
+            Column(Modifier.fillMaxSize().padding(padding).padding(horizontal=18.dp).then(if(screen=="Settings") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 Spacer(Modifier.height(18.dp))
                 when(screen) {
                     "Square" -> {
@@ -264,8 +264,7 @@ private fun PlayerApp(controller: MediaController?) {
                         analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
-                        LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            val filtered=songs.filter { song ->
+                        val filtered=songs.filter { song ->
                             (searchQuery.isBlank() || song.title.contains(searchQuery,true) || song.artist.contains(searchQuery,true) || song.album.contains(searchQuery,true)) && when(grouping) {
                                 "Folder" -> selectedGroup=="All" || song.folder==selectedGroup
                                 "Artist" -> selectedGroup=="All" || song.artist==selectedGroup
@@ -279,7 +278,7 @@ private fun PlayerApp(controller: MediaController?) {
                         }.let { list -> if(grouping=="Most played")list.sortedByDescending { extras.plays(it.id) } else list }
                         LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             items(filtered,key={it.id}) { song ->
-                                Row(Modifier.fillMaxWidth().clickable { play(songs,songs.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Row(Modifier.fillMaxWidth().clickable { play(filtered,filtered.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                                     Icon(Icons.Default.MusicNote,null,tint=accent,modifier=Modifier.size(36.dp))
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
