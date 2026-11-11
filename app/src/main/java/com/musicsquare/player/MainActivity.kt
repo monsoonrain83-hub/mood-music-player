@@ -98,6 +98,7 @@ private fun PlayerApp(controller: MediaController?) {
     var dancerVisible by remember { mutableStateOf(false) }
     var manualLyrics by remember { mutableStateOf("") }
     var lyricsMessage by remember { mutableStateOf<String?>(null) }
+    var lyricsOffset by remember { mutableLongStateOf(0L) }
     var converterSource by remember { mutableStateOf<Uri?>(null) }
     var converterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var converterBitrate by remember { mutableIntStateOf(192) }
@@ -304,6 +305,7 @@ private fun PlayerApp(controller: MediaController?) {
     LaunchedEffect(current?.id) {
         val song=current
         lyrics=null
+        lyricsOffset=if(song!=null)lyricsRepository.offsetMs(song.title,song.artist,song.duration) else 0L
         if(song!=null) {
             lyrics=lyricsRepository.saved(song.title,song.artist,song.duration)
             if(lyrics==null) {
@@ -483,12 +485,17 @@ private fun PlayerApp(controller: MediaController?) {
                         if(lyricsVisible) {
                             Surface(color=surface,shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth().clickable { lyricsExpanded=!lyricsExpanded }) {
                                 Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    val line=lyrics?.currentLine(position)
+                                    val line=lyrics?.currentLine((position+lyricsOffset).coerceAtLeast(0L))
                                     Text(line ?: if(lyricsLoading)"Searching lyrics..." else if(lyrics?.plain!=null)"Lyrics available — tap to read" else "Lyrics not available",color=Color.White,maxLines=if(lyricsExpanded)Int.MAX_VALUE else 1,overflow=TextOverflow.Ellipsis)
                                     if(lyricsExpanded) {
                                         val content=lyrics?.plain ?: lyrics?.lines?.joinToString("\n") { it.text } ?: "No lyrics found"
                                         Text(content,color=muted,fontSize=13.sp,modifier=Modifier.heightIn(max=180.dp).verticalScroll(rememberScrollState()))
                                         Text(lyrics?.source ?: "",color=accent,fontSize=11.sp)
+                                        Row(verticalAlignment=Alignment.CenterVertically) {
+                                            TextButton(onClick={current?.let { song -> lyricsOffset=(lyricsOffset-500L).coerceAtLeast(-15000L);lyricsRepository.setOffsetMs(song.title,song.artist,song.duration,lyricsOffset) }}) { Text("−0.5s") }
+                                            Text("Sync ${lyricsOffset/1000.0}s",color=muted,fontSize=12.sp)
+                                            TextButton(onClick={current?.let { song -> lyricsOffset=(lyricsOffset+500L).coerceAtMost(15000L);lyricsRepository.setOffsetMs(song.title,song.artist,song.duration,lyricsOffset) }}) { Text("+0.5s") }
+                                        }
                                     }
                                 }
                             }
