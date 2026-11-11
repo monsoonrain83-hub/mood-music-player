@@ -544,6 +544,77 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         current?.let { song -> Text("Mood: ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",color=muted) }
                     }
+                    "Tools" -> {
+                        Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Spacer(Modifier.height(10.dp))
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Text("Batch tag editor • MP3, FLAC, WAV, OGG, M4A",color=accent,fontWeight=FontWeight.Bold)
+                            OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
+                            Text("${selectedTagUris.size} selected",color=muted)
+                            OutlinedTextField(value=tagTitle,onValueChange={tagTitle=it},label={Text("Title (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=tagArtist,onValueChange={tagArtist=it},label={Text("Artist")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=tagYear,onValueChange={tagYear=it},label={Text("Year")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=tagGenre,onValueChange={tagGenre=it},label={Text("Genre")},modifier=Modifier.fillMaxWidth())
+                            Button(enabled=!tagBusy && selectedTagUris.isNotEmpty(),onClick={
+                                scope.launch {
+                                    tagBusy=true
+                                    val results=tagEditor.writeBatch(selectedTagUris,TagChanges(
+                                        title=tagTitle.takeIf { it.isNotBlank() },
+                                        artist=tagArtist.takeIf { it.isNotBlank() },
+                                        album=tagAlbum.takeIf { it.isNotBlank() },
+                                        year=tagYear.takeIf { it.isNotBlank() },
+                                        genre=tagGenre.takeIf { it.isNotBlank() }
+                                    ))
+                                    tagStatus="${results.count { it.success }}/${results.size} files updated; " +
+                                        results.filterNot { it.success }.take(3).joinToString { it.message }
+                                    tagBusy=false
+                                    refresh()
+                                }
+                            }) { Text(if(tagBusy)"Writing..." else "Apply tags to selected files") }
+                            tagStatus?.let { Text(it,color=muted) }
+                            HorizontalDivider()
+                            Text("Audio converter",color=accent,fontWeight=FontWeight.Bold)
+                            OutlinedButton(onClick={converterPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source audio") }
+                            Text(converterSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=converterFormat==fmt,onClick={converterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
+                            }
+                            Text("Bitrate: ${converterBitrate} kbps",color=muted)
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("$"+"{rate}k")}) }
+                            }
+                            Button(enabled=converterSource!=null && !converterBusy,onClick={
+                                converterSaver.launch("converted.${converterFormat.ext}")
+                            }) { Text(if(converterBusy)"Converting..." else "Convert and save") }
+                            converterStatus?.let { Text(it,color=muted) }
+                            HorizontalDivider()
+                            Text("Audio cutter / silence / speed",color=accent,fontWeight=FontWeight.Bold)
+                            OutlinedButton(onClick={wavPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source to edit") }
+                            Text(wavSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=cutterFormat==fmt,onClick={cutterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
+                            }
+                            OutlinedTextField(value=wavStart,onValueChange={wavStart=it},label={Text("Start seconds")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=wavEnd,onValueChange={wavEnd=it},label={Text("End seconds (blank = end)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=wavRemoveRanges,onValueChange={wavRemoveRanges=it},label={Text("Remove ranges: 10-15, 25-30")},modifier=Modifier.fillMaxWidth())
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Checkbox(checked=wavRemoveSilence,onCheckedChange={wavRemoveSilence=it})
+                                Text("Remove long silence",color=muted)
+                            }
+                            if(wavRemoveSilence)OutlinedTextField(value=wavSilenceSeconds,onValueChange={wavSilenceSeconds=it},label={Text("Minimum silence seconds")})
+                            Text("Speed: ${"%.2f".format(java.util.Locale.US,wavSpeed)}×",color=muted)
+                            Slider(value=wavSpeed,onValueChange={wavSpeed=it},valueRange=0.5f..2f)
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Checkbox(checked=cutterPitch,onCheckedChange={cutterPitch=it})
+                                Text("Preserve pitch",color=muted)
+                            }
+                            Button(enabled=wavSource!=null && !wavBusy,onClick={cutterSaver.launch("edited.${cutterFormat.ext}")}) {
+                                Text(if(wavBusy)"Processing..." else "Process and save")
+                            }
+                            wavStatus?.let { Text(it,color=muted) }
+                        }
+                    }
                     else -> {
                         Text("Settings",fontSize=30.sp,color=Color.White,fontWeight=FontWeight.Bold)
                         Spacer(Modifier.height(20.dp))
