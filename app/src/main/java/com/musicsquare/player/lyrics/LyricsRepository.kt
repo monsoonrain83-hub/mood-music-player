@@ -40,6 +40,10 @@ class LyricsRepository(private val context:Context) {
   val bytes=MessageDigest.getInstance("SHA-256").digest("$title|$artist|$duration".toByteArray())
   return bytes.joinToString("") { "%02x".format(it) }
  }
+ fun offsetMs(title:String,artist:String,duration:Long):Long = prefs.getLong("offset_${key(title,artist,duration)}",0L)
+ fun setOffsetMs(title:String,artist:String,duration:Long,value:Long) {
+  prefs.edit().putLong("offset_${key(title,artist,duration)}",value.coerceIn(-15000L,15000L)).apply()
+ }
  fun saved(title:String,artist:String,duration:Long):Lyrics? {
   val raw=prefs.getString(key(title,artist,duration),null) ?: return null
   return decode(raw,"Offline cache")
