@@ -39,6 +39,8 @@ import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
 import com.musicsquare.player.data.LibraryExtras
+import com.musicsquare.player.lyrics.LyricsRepository
+import com.musicsquare.player.lyrics.Lyrics
 import com.musicsquare.player.tags.TagEditor
 import com.musicsquare.player.tags.TagChanges
 import android.net.Uri
@@ -85,6 +87,11 @@ private fun PlayerApp(controller: MediaController?) {
     val tagEditor = remember { TagEditor(context) }
     val wavEditor = remember { WavEditor(context) }
     val audioEngine = remember { AudioEngine(context) }
+    val lyricsRepository = remember { LyricsRepository(context) }
+    var lyrics by remember { mutableStateOf<Lyrics?>(null) }
+    var lyricsLoading by remember { mutableStateOf(false) }
+    var lyricsExpanded by remember { mutableStateOf(false) }
+    var lyricsVisible by remember { mutableStateOf(true) }
     var converterSource by remember { mutableStateOf<Uri?>(null) }
     var converterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var converterBitrate by remember { mutableIntStateOf(192) }
@@ -243,6 +250,18 @@ private fun PlayerApp(controller: MediaController?) {
         while (true) {
             position = controller?.currentPosition?.coerceAtLeast(0) ?: 0L
             kotlinx.coroutines.delay(500)
+        }
+    }
+    LaunchedEffect(current?.id) {
+        val song=current
+        lyrics=null
+        if(song!=null) {
+            lyrics=lyricsRepository.saved(song.title,song.artist,song.duration)
+            if(lyrics==null) {
+                lyricsLoading=true
+                lyrics=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration)
+                lyricsLoading=false
+            }
         }
     }
     fun play(list: List<LocalSong>, index: Int = 0) {
@@ -410,7 +429,22 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(26.dp))
                         Text(current?.title ?: "No song selected",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
-                        Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(10.dp))
+                        if(lyricsVisible) {
+                            Surface(color=surface,shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth().clickable { lyricsExpanded=!lyricsExpanded }) {
+                                Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                    val line=lyrics?.currentLine(position)
+                                    Text(line ?: if(lyricsLoading)"Searching lyrics..." else if(lyrics?.plain!=null)"Lyrics available — tap to read" else "Lyrics not available",color=Color.White,maxLines=if(lyricsExpanded)Int.MAX_VALUE else 1,overflow=TextOverflow.Ellipsis)
+                                    if(lyricsExpanded) {
+                                        val content=lyrics?.plain ?: lyrics?.lines?.joinToString("\\n") { it.text } ?: "No lyrics found"
+                                        Text(content,color=muted,fontSize=13.sp,modifier=Modifier.heightIn(max=180.dp).verticalScroll(rememberScrollState()))
+                                        Text(lyrics?.source ?: "",color=accent,fontSize=11.sp)
+                                    }
+                                }
+                            }
+                        }
+                        TextButton(onClick={lyricsVisible=!lyricsVisible}) { Text(if(lyricsVisible)"Hide lyrics" else "Show lyrics") }
+                        Spacer(Modifier.height(8.dp))
                         val duration=(controller?.duration ?: 0L).coerceAtLeast(0L)
                         Slider(value=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f,
                             onValueChange={controller?.seekTo((it*duration).toLong())},enabled=duration>0)
@@ -422,7 +456,7 @@ private fun PlayerApp(controller: MediaController?) {
                             IconButton(onClick={controller?.seekToNextMediaItem()}) { Icon(Icons.Default.SkipNext,"Next",tint=Color.White) }
                             IconButton(onClick={
                                 current?.let { song ->
-                                    val intent=Intent(Intent.ACTION_SEND).apply { type="text/plain"; putExtra(Intent.EXTRA_TEXT,"${song.title} — ${song.artist}") }
+                                    val intent=Intent(Intent.ACTION_SEND).apply { type="audio/*"; putExtra(Intent.EXTRA_STREAM,song.uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);clipData=android.content.ClipData.newUri(context.contentResolver,song.title,song.uri) }
                                     context.startActivity(Intent.createChooser(intent,"Share song"))
                                 }
                             }) { Icon(Icons.Default.Share,"Share",tint=Color.White) }
