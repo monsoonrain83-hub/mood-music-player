@@ -616,7 +616,7 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             Text("Bitrate: ${converterBitrate} kbps",color=muted)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
-                                listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("$"+"{rate}k")}) }
+                                listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("${rate}k")}) }
                             }
                             Button(enabled=converterSource!=null && !converterBusy,onClick={
                                 converterSaver.launch("converted.${converterFormat.ext}")
