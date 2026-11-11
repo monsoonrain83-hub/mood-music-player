@@ -40,6 +40,7 @@ import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
+import com.musicsquare.player.data.PlaybackQueueStore
 import com.musicsquare.player.data.LibraryExtras
 import com.musicsquare.player.visual.DancingCompanion
 import com.musicsquare.player.lyrics.LyricsRepository
@@ -87,6 +88,8 @@ private fun PlayerApp(controller: MediaController?) {
     val analysisStore = remember { AnalysisStore(context) }
     val analyzer = remember { OfflineAudioAnalyzer(context) }
     val extras = remember { LibraryExtras(context) }
+    val queueStore=remember { PlaybackQueueStore(context) }
+    var restoredQueue by remember { mutableStateOf(false) }
     val tagEditor = remember { TagEditor(context) }
     val wavEditor = remember { WavEditor(context) }
     val audioEngine = remember { AudioEngine(context) }
@@ -290,6 +293,37 @@ private fun PlayerApp(controller: MediaController?) {
         while (true) {
             position = controller?.currentPosition?.coerceAtLeast(0) ?: 0L
             kotlinx.coroutines.delay(500)
+        }
+    }
+    LaunchedEffect(controller,songs) {
+        if(!restoredQueue && controller!=null && songs.isNotEmpty()) {
+            restoredQueue=true
+            val snapshot=queueStore.read()
+            if(snapshot!=null && controller.mediaItemCount==0) {
+                val restored=snapshot.ids.mapNotNull { id -> songs.firstOrNull { it.id==id } }
+                if(restored.isNotEmpty()) {
+                    val items=restored.map { song ->
+                        MediaItem.Builder().setUri(song.uri).setMediaId(song.id.toString())
+                            .setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).build()).build()
+                    }
+                    val idx=snapshot.index.coerceIn(0,items.lastIndex)
+                    controller.setMediaItems(items,idx,snapshot.positionMs)
+                    controller.shuffleModeEnabled=snapshot.shuffle
+                    controller.repeatMode=snapshot.repeat
+                    controller.prepare()
+                    current=restored[idx]
+                    shuffleOn=snapshot.shuffle
+                    repeatMode=snapshot.repeat
+                }
+            }
+        }
+    }
+    LaunchedEffect(controller) {
+        while(true) {
+            kotlinx.coroutines.delay(5000)
+            val player=controller ?: continue
+            val ids=(0 until player.mediaItemCount).mapNotNull { player.getMediaItemAt(it).mediaId.toLongOrNull() }
+            if(ids.isNotEmpty())queueStore.save(ids,player.currentMediaItemIndex,player.currentPosition,player.shuffleModeEnabled,player.repeatMode)
         }
     }
     LaunchedEffect(sleepMinutes) {
