@@ -35,6 +35,10 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.data.AnalysisStore
+import com.musicsquare.player.data.LibraryExtras
+import com.musicsquare.player.tags.TagEditor
+import com.musicsquare.player.tags.TagChanges
+import android.net.Uri
 import com.musicsquare.player.data.LocalSong
 import com.musicsquare.player.data.MoodStore
 import com.musicsquare.player.data.scanLocalMusic
@@ -74,6 +78,25 @@ private fun PlayerApp(controller: MediaController?) {
     val store = remember { MoodStore(context) }
     val analysisStore = remember { AnalysisStore(context) }
     val analyzer = remember { OfflineAudioAnalyzer(context) }
+    val extras = remember { LibraryExtras(context) }
+    val tagEditor = remember { TagEditor(context) }
+    val eqPrefs = remember { context.getSharedPreferences("equalizer",android.content.Context.MODE_PRIVATE) }
+    var preset by remember { mutableStateOf(eqPrefs.getString("preset","Flat") ?: "Flat") }
+    var bass by remember { mutableFloatStateOf(eqPrefs.getInt("bass",0).toFloat()) }
+    var grouping by remember { mutableStateOf("All") }
+    var selectedGroup by remember { mutableStateOf("All") }
+    var playlistName by remember { mutableStateOf("") }
+    var selectedPlaylist by remember { mutableStateOf<String?>(null) }
+    var selectedForPlaylist by remember { mutableStateOf<LocalSong?>(null) }
+    var playlistVersion by remember { mutableIntStateOf(0) }
+    var tagTitle by remember { mutableStateOf("") }
+    var tagArtist by remember { mutableStateOf("") }
+    var tagAlbum by remember { mutableStateOf("") }
+    var tagYear by remember { mutableStateOf("") }
+    var tagGenre by remember { mutableStateOf("") }
+    var tagStatus by remember { mutableStateOf<String?>(null) }
+    var tagBusy by remember { mutableStateOf(false) }
+    var selectedTagUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var analysisProgress by remember { mutableStateOf<String?>(null) }
     var analyzed by remember { mutableIntStateOf(0) }
     var songs by remember { mutableStateOf<List<LocalSong>>(emptyList()) }
@@ -99,6 +122,10 @@ private fun PlayerApp(controller: MediaController?) {
             catch (e: Exception) { error = e.localizedMessage ?: "Unable to scan music" }
             finally { loading = false }
         }
+    }
+    val tagPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        selectedTagUris = uris.filter { it.toString().isNotBlank() }
+        tagStatus = if(selectedTagUris.isEmpty()) "No files selected" else "${selectedTagUris.size} files selected. Blank fields remain unchanged."
     }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         allowed = it
@@ -129,6 +156,7 @@ private fun PlayerApp(controller: MediaController?) {
         }
         controller?.apply { setMediaItems(items, index.coerceIn(0,items.lastIndex), 0); prepare(); play() }
         current = list[index.coerceIn(0,list.lastIndex)]
+        extras.played(current!!.id)
         screen = "Now"
     }
     MaterialTheme(colorScheme = darkColorScheme(primary=accent,background=bg,surface=surface)) {
@@ -190,6 +218,29 @@ private fun PlayerApp(controller: MediaController?) {
                     }
                     "Library" -> {
                         Text("Your Library",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                            listOf("All","Folder","Artist","Album","Genre","Year","Most played","Favorites","Playlists").forEach { option ->
+                                FilterChip(selected=grouping==option,onClick={grouping=option;selectedGroup="All"},label={Text(option)})
+                            }
+                        }
+                        if(grouping=="Playlists") {
+                            OutlinedTextField(value=playlistName,onValueChange={playlistName=it},label={Text("New playlist name")},singleLine=true)
+                            Button(onClick={extras.createPlaylist(playlistName);playlistVersion++;playlistName=""}) { Text("Create playlist") }
+                        }
+                        val groupOptions=when(grouping) {
+                            "Folder" -> songs.map { it.folder }.distinct()
+                            "Artist" -> songs.map { it.artist }.distinct()
+                            "Album" -> songs.map { it.album }.distinct()
+                            "Genre" -> songs.map { it.genre }.distinct()
+                            "Year" -> songs.map { it.year.toString() }.distinct()
+                            "Playlists" -> extras.playlistNames().also { playlistVersion }
+                            else -> emptyList()
+                        }.sorted()
+                        if(groupOptions.isNotEmpty()) {
+                            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                (listOf("All")+groupOptions).forEach { group -> FilterChip(selected=selectedGroup==group,onClick={selectedGroup=group},label={Text(group)}) }
+                            }
+                        }
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("${songs.size} local songs",color=muted,modifier=Modifier.weight(1f))
                             TextButton(onClick={if(allowed)refresh() else request.launch(permission)}) { Text("Refresh") }
@@ -214,7 +265,20 @@ private fun PlayerApp(controller: MediaController?) {
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            items(songs.filter { searchQuery.isBlank() || it.title.contains(searchQuery,true) || it.artist.contains(searchQuery,true) || it.album.contains(searchQuery,true) },key={it.id}) { song ->
+                            val filtered=songs.filter { song ->
+                            (searchQuery.isBlank() || song.title.contains(searchQuery,true) || song.artist.contains(searchQuery,true) || song.album.contains(searchQuery,true)) && when(grouping) {
+                                "Folder" -> selectedGroup=="All" || song.folder==selectedGroup
+                                "Artist" -> selectedGroup=="All" || song.artist==selectedGroup
+                                "Album" -> selectedGroup=="All" || song.album==selectedGroup
+                                "Genre" -> selectedGroup=="All" || song.genre==selectedGroup
+                                "Year" -> selectedGroup=="All" || song.year.toString()==selectedGroup
+                                "Favorites" -> favorites.getBoolean(song.id.toString(),false)
+                                "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
+                                else -> true
+                            }
+                        }.let { list -> if(grouping=="Most played")list.sortedByDescending { extras.plays(it.id) } else list }
+                        LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                            items(filtered,key={it.id}) { song ->
                                 Row(Modifier.fillMaxWidth().clickable { play(songs,songs.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                                     Icon(Icons.Default.MusicNote,null,tint=accent,modifier=Modifier.size(36.dp))
                                     Spacer(Modifier.width(10.dp))
@@ -227,6 +291,15 @@ private fun PlayerApp(controller: MediaController?) {
                                         favorites.edit().putBoolean(key,!favorites.getBoolean(key,false)).apply()
                                         favoritesVersion++
                                     }) { Icon(if(favorites.getBoolean(song.id.toString(),false)) Icons.Default.Favorite else Icons.Default.FavoriteBorder,"Favorite",tint=accent) }
+                                    IconButton(onClick={
+                                        val intent=Intent(Intent.ACTION_SEND).apply {
+                                            type="audio/*"; putExtra(Intent.EXTRA_STREAM,song.uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            clipData=android.content.ClipData.newUri(context.contentResolver,song.title,song.uri)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent,"Send audio file"))
+                                    }) { Icon(Icons.Default.Share,"Share audio file",tint=accent) }
+                                    IconButton(onClick={selectedForPlaylist=song}) { Icon(Icons.Default.PlaylistAdd,"Add to playlist",tint=accent) }
                                     TextButton(onClick={assignSong=song}) { Text("Mood") }
                                 }
                             }
@@ -267,10 +340,43 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Favorites: ${songs.count { favorites.getBoolean(it.id.toString(),false) } + (favoritesVersion * 0)}",color=muted)
                         Text("No account or internet required.",color=muted)
                         Spacer(Modifier.height(12.dp))
-                        Text("MusicSquare Player 0.2.0",color=Color.White)
+                        Text("MusicSquare Player 0.3.0",color=Color.White)
+                        Spacer(Modifier.height(16.dp))
+                        Text("Equalizer",fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            listOf("Flat","Bass Boost","Treble Boost","Vocal","Rock","Jazz","Classical","Dance").forEach { p ->
+                                FilterChip(selected=preset==p,onClick={preset=p;eqPrefs.edit().putString("preset",p).apply()},label={Text(p)})
+                            }
+                        }
+                        Text("Bass: ${bass.toInt()}%",color=muted)
+                        Slider(value=bass,onValueChange={bass=it;eqPrefs.edit().putInt("bass",it.toInt()).apply()},valueRange=0f..100f)
+                        Text("Tag editor — writes ID3 tags into MP3 files",color=Color.White,fontSize=18.sp)
+                        OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/mpeg","audio/mp3","application/octet-stream"))}) { Text("Select one or multiple MP3 files") }
+                        Text("${selectedTagUris.size} selected",color=muted)
+                        OutlinedTextField(tagTitle,{tagTitle=it},label={Text("Title (blank = unchanged)")})
+                        OutlinedTextField(tagArtist,{tagArtist=it},label={Text("Artist")})
+                        OutlinedTextField(tagAlbum,{tagAlbum=it},label={Text("Album")})
+                        OutlinedTextField(tagYear,{tagYear=it},label={Text("Year")})
+                        OutlinedTextField(tagGenre,{tagGenre=it},label={Text("Genre")})
+                        Button(enabled=selectedTagUris.isNotEmpty() && !tagBusy,onClick={
+                            scope.launch {
+                                tagBusy=true
+                                val changes=TagChanges(title=tagTitle.takeIf{it.isNotBlank()},artist=tagArtist.takeIf{it.isNotBlank()},album=tagAlbum.takeIf{it.isNotBlank()},year=tagYear.takeIf{it.isNotBlank()},genre=tagGenre.takeIf{it.isNotBlank()})
+                                val results=tagEditor.writeBatch(selectedTagUris,changes)
+                                tagStatus="${results.count{it.success}}/${results.size} files updated. "+results.filterNot{it.success}.take(2).joinToString { it.message }
+                                tagBusy=false
+                                refresh()
+                            }
+                        }) { Text(if(tagBusy)"Writing tags..." else "Save embedded tags to files") }
+                        tagStatus?.let { Text(it,color=muted) }
                     }
                 }
             }
+        }
+        selectedForPlaylist?.let { song ->
+            AlertDialog(onDismissRequest={selectedForPlaylist=null},title={Text("Add to playlist")},text={
+                Column { extras.playlistNames().forEach { name -> TextButton(onClick={extras.add(name,song.id);playlistVersion++;selectedForPlaylist=null}) { Text(name) } } }
+            },confirmButton={TextButton(onClick={selectedForPlaylist=null}) { Text("Close") }})
         }
         assignSong?.let { song ->
             AlertDialog(onDismissRequest={assignSong=null},title={Text("Choose mood for ${song.title}")},
