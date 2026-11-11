@@ -86,6 +86,7 @@ private fun PlayerApp(controller: MediaController?) {
     var wavSource by remember { mutableStateOf<Uri?>(null) }
     var wavStart by remember { mutableStateOf("0") }
     var wavEnd by remember { mutableStateOf("") }
+    var wavRemoveRanges by remember { mutableStateOf("") }
     var wavSpeed by remember { mutableFloatStateOf(1f) }
     var wavRemoveSilence by remember { mutableStateOf(false) }
     var wavSilenceSeconds by remember { mutableStateOf("1.5") }
@@ -144,7 +145,15 @@ private fun PlayerApp(controller: MediaController?) {
                 endMs=wavEnd.toDoubleOrNull()?.let { (it*1000).toLong() },
                 speed=wavSpeed.toDouble(),
                 removeSilence=wavRemoveSilence,
-                minSilenceMs=((wavSilenceSeconds.toDoubleOrNull() ?: 1.5)*1000).toInt().coerceIn(250,30000)
+                minSilenceMs=((wavSilenceSeconds.toDoubleOrNull() ?: 1.5)*1000).toInt().coerceIn(250,30000),
+                removeRangesMs=wavRemoveRanges.split(",").mapNotNull { part ->
+                    val times=part.trim().split("-")
+                    if(times.size!=2)null else {
+                        val start=times[0].trim().toDoubleOrNull()
+                        val end=times[1].trim().toDoubleOrNull()
+                        if(start==null || end==null || start<0 || end<=start)null else ((start*1000).toLong() to (end*1000).toLong())
+                    }
+                }
             ))
             wavStatus=result.fold(onSuccess={"WAV file saved successfully"},onFailure={it.message ?: "WAV export failed"})
             wavBusy=false
@@ -403,6 +412,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text(wavSource?.lastPathSegment ?: "No WAV selected",color=muted)
                         OutlinedTextField(wavStart,{wavStart=it},label={Text("Start time (seconds)")})
                         OutlinedTextField(wavEnd,{wavEnd=it},label={Text("End time (seconds; blank = end)")})
+                        OutlinedTextField(wavRemoveRanges,{wavRemoveRanges=it},label={Text("Remove middle ranges, e.g. 10-15, 40-45 (seconds)")})
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Checkbox(checked=wavRemoveSilence,onCheckedChange={wavRemoveSilence=it})
                             Text("Automatically remove long pauses",color=Color.White)
