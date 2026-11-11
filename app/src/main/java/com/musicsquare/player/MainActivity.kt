@@ -270,11 +270,12 @@ private fun PlayerApp(controller: MediaController?) {
         if (it) refresh() else error = "Music access is required to display local songs."
     }
     LaunchedEffect(allowed) { if (allowed) refresh() }
+    val latestSongs by rememberUpdatedState(songs)
     DisposableEffect(controller) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-                val matched=songs.firstOrNull { it.id.toString()==item?.mediaId }
+                val matched=latestSongs.firstOrNull { it.id.toString()==item?.mediaId }
                 if(matched!=null && matched.id!=current?.id) {
                     current=matched
                     extras.played(matched.id)
@@ -282,7 +283,7 @@ private fun PlayerApp(controller: MediaController?) {
             }
         }
         controller?.addListener(listener)
-        controller?.currentMediaItem?.let { item -> current=songs.firstOrNull { it.id.toString()==item.mediaId } ?: current }
+        controller?.currentMediaItem?.let { item -> current=latestSongs.firstOrNull { it.id.toString()==item.mediaId } ?: current }
         onDispose { controller?.removeListener(listener) }
     }
     LaunchedEffect(controller, songs) {
