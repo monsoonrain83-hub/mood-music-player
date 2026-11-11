@@ -517,8 +517,33 @@ private fun PlayerApp(controller: MediaController?) {
                 }
             }
             if(dancerVisible && screen=="Now") {
-                Box(Modifier.align(Alignment.BottomEnd).padding(bottom=8.dp)) {
-                    DancingCompanion(playing=playing,onDismiss={dancerVisible=false})
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val density=androidx.compose.ui.platform.LocalDensity.current
+                    val dancerWidth=with(density) { 170.dp.toPx() }
+                    val dancerHeight=with(density) { 270.dp.toPx() }
+                    val areaWidth=with(density) { maxWidth.toPx() }
+                    val areaHeight=with(density) { maxHeight.toPx() }
+                    val maxX=(areaWidth-dancerWidth).coerceAtLeast(0f)
+                    val maxY=(areaHeight-dancerHeight).coerceAtLeast(0f)
+                    var dancerX by remember { mutableFloatStateOf(maxX) }
+                    var dancerY by remember { mutableFloatStateOf(maxY) }
+                    LaunchedEffect(maxX,maxY) {
+                        dancerX=dancerX.coerceIn(0f,maxX)
+                        dancerY=dancerY.coerceIn(0f,maxY)
+                    }
+                    Box(
+                        Modifier
+                            .offset { androidx.compose.ui.unit.IntOffset(dancerX.toInt(),dancerY.toInt()) }
+                            .pointerInput(maxX,maxY) {
+                                androidx.compose.foundation.gestures.detectDragGestures { change,drag ->
+                                    change.consume()
+                                    dancerX=(dancerX+drag.x).coerceIn(0f,maxX)
+                                    dancerY=(dancerY+drag.y).coerceIn(0f,maxY)
+                                }
+                            }
+                    ) {
+                        DancingCompanion(playing=playing,onDismiss={dancerVisible=false})
+                    }
                 }
             }
             }
