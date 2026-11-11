@@ -91,6 +91,8 @@ private fun PlayerApp(controller: MediaController?) {
     var converterStatus by remember { mutableStateOf<String?>(null) }
     var converterBusy by remember { mutableStateOf(false) }
     var tagFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
+    var tagExportSource by remember { mutableStateOf<Uri?>(null) }
+    var tagExportStatus by remember { mutableStateOf<String?>(null) }
     var wavSource by remember { mutableStateOf<Uri?>(null) }
     var wavStart by remember { mutableStateOf("0") }
     var wavEnd by remember { mutableStateOf("") }
@@ -142,6 +144,20 @@ private fun PlayerApp(controller: MediaController?) {
             try { songs = scanLocalMusic(context); error = null }
             catch (e: Exception) { error = e.localizedMessage ?: "Unable to scan music" }
             finally { loading = false }
+        }
+    }
+    val tagExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { tagExportSource=it }
+    val tagExportSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { dest ->
+        val src=tagExportSource
+        if(src!=null && dest!=null)scope.launch {
+            tagBusy=true
+            val result=audioEngine.writeTags(src,dest,tagFormat,AudioEngine.Metadata(
+                title=tagTitle.takeIf{it.isNotBlank()},artist=tagArtist.takeIf{it.isNotBlank()},
+                album=tagAlbum.takeIf{it.isNotBlank()},year=tagYear.takeIf{it.isNotBlank()},
+                genre=tagGenre.takeIf{it.isNotBlank()}
+            ))
+            tagExportStatus=result.fold(onSuccess={"Tagged copy saved"},onFailure={it.message ?: "Metadata export failed"})
+            tagBusy=false
         }
     }
     val converterPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { converterSource=it }
