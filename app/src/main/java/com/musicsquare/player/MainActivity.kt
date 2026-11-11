@@ -158,7 +158,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                                     repeat(5) { col ->
                                         val cell=row*5+col
-                                        val count=songs.count { store.cell(it.id)==cell }
+                                        val count=songs.count { store.cell(it.id)==cell } + (assignmentsVersion * 0)
                                         Column(Modifier.weight(1f).aspectRatio(0.82f)
                                             .background(palette[(col+row)%5].copy(alpha=if(selectedCell==cell)1f else .72f),RoundedCornerShape(10.dp))
                                             .clickable { selectedCell=cell },horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
