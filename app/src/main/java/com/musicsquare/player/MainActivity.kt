@@ -34,6 +34,8 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicsquare.player.audio.OfflineAudioAnalyzer
+import com.musicsquare.player.audio.WavEditor
+import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
 import com.musicsquare.player.data.LibraryExtras
 import com.musicsquare.player.tags.TagEditor
@@ -80,6 +82,15 @@ private fun PlayerApp(controller: MediaController?) {
     val analyzer = remember { OfflineAudioAnalyzer(context) }
     val extras = remember { LibraryExtras(context) }
     val tagEditor = remember { TagEditor(context) }
+    val wavEditor = remember { WavEditor(context) }
+    var wavSource by remember { mutableStateOf<Uri?>(null) }
+    var wavStart by remember { mutableStateOf("0") }
+    var wavEnd by remember { mutableStateOf("") }
+    var wavSpeed by remember { mutableFloatStateOf(1f) }
+    var wavRemoveSilence by remember { mutableStateOf(false) }
+    var wavSilenceSeconds by remember { mutableStateOf("1.5") }
+    var wavStatus by remember { mutableStateOf<String?>(null) }
+    var wavBusy by remember { mutableStateOf(false) }
     val eqPrefs = remember { context.getSharedPreferences("equalizer",android.content.Context.MODE_PRIVATE) }
     var preset by remember { mutableStateOf(eqPrefs.getString("preset","Flat") ?: "Flat") }
     var bass by remember { mutableFloatStateOf(eqPrefs.getInt("bass",0).toFloat()) }
@@ -121,6 +132,23 @@ private fun PlayerApp(controller: MediaController?) {
             try { songs = scanLocalMusic(context); error = null }
             catch (e: Exception) { error = e.localizedMessage ?: "Unable to scan music" }
             finally { loading = false }
+        }
+    }
+    val wavPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { wavSource=it }
+    val wavSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { dest ->
+        val src=wavSource
+        if(src!=null && dest!=null) scope.launch {
+            wavBusy=true
+            val result=wavEditor.edit(src,dest,WavEdit(
+                startMs=((wavStart.toDoubleOrNull() ?: 0.0)*1000).toLong(),
+                endMs=wavEnd.toDoubleOrNull()?.let { (it*1000).toLong() },
+                speed=wavSpeed.toDouble(),
+                removeSilence=wavRemoveSilence,
+                minSilenceMs=((wavSilenceSeconds.toDoubleOrNull() ?: 1.5)*1000).toInt().coerceIn(250,30000)
+            ))
+            wavStatus=result.fold(onSuccess={"WAV file saved successfully"},onFailure={it.message ?: "WAV export failed"})
+            wavBusy=false
+            refresh()
         }
     }
     val tagPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -368,6 +396,24 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }) { Text(if(tagBusy)"Writing tags..." else "Save embedded tags to files") }
                         tagStatus?.let { Text(it,color=muted) }
+                        Spacer(Modifier.height(24.dp))
+                        Text("WAV Cutter & Speed",fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                        Text("Trim beginning/end, remove pauses longer than 1–2 seconds, or change speed. Exports a new WAV file. Speed changes pitch.",color=muted,fontSize=12.sp)
+                        OutlinedButton(onClick={wavPicker.launch(arrayOf("audio/wav","audio/x-wav","audio/wave"))}) { Text("Select PCM WAV") }
+                        Text(wavSource?.lastPathSegment ?: "No WAV selected",color=muted)
+                        OutlinedTextField(wavStart,{wavStart=it},label={Text("Start time (seconds)")})
+                        OutlinedTextField(wavEnd,{wavEnd=it},label={Text("End time (seconds; blank = end)")})
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Checkbox(checked=wavRemoveSilence,onCheckedChange={wavRemoveSilence=it})
+                            Text("Automatically remove long pauses",color=Color.White)
+                        }
+                        if(wavRemoveSilence) OutlinedTextField(wavSilenceSeconds,{wavSilenceSeconds=it},label={Text("Minimum pause duration (seconds)")})
+                        Text("Speed: ${"%.2f".format(java.util.Locale.US,wavSpeed)}×",color=muted)
+                        Slider(value=wavSpeed,onValueChange={wavSpeed=it},valueRange=0.25f..4f)
+                        Button(enabled=wavSource!=null && !wavBusy,onClick={wavSaver.launch("edited-audio.wav")}) {
+                            Text(if(wavBusy)"Processing…" else "Save edited WAV as new file")
+                        }
+                        wavStatus?.let { Text(it,color=muted) }
                     }
                 }
             }
