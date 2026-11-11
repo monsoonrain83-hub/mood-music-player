@@ -39,6 +39,7 @@ import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
 import com.musicsquare.player.data.LibraryExtras
+import com.musicsquare.player.visual.DancingCompanion
 import com.musicsquare.player.lyrics.LyricsRepository
 import com.musicsquare.player.lyrics.Lyrics
 import com.musicsquare.player.tags.TagEditor
@@ -92,6 +93,9 @@ private fun PlayerApp(controller: MediaController?) {
     var lyricsLoading by remember { mutableStateOf(false) }
     var lyricsExpanded by remember { mutableStateOf(false) }
     var lyricsVisible by remember { mutableStateOf(true) }
+    var dancerVisible by remember { mutableStateOf(false) }
+    var manualLyrics by remember { mutableStateOf("") }
+    var lyricsMessage by remember { mutableStateOf<String?>(null) }
     var converterSource by remember { mutableStateOf<Uri?>(null) }
     var converterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var converterBitrate by remember { mutableIntStateOf(192) }
@@ -227,6 +231,29 @@ private fun PlayerApp(controller: MediaController?) {
             refresh()
         }
     }
+    val lrcPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val song=current
+        if(uri!=null && song!=null)scope.launch {
+            val raw=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }
+            if(raw!=null) {
+                lyricsRepository.saveLrc(song.title,song.artist,song.duration,raw)
+                lyrics=lyricsRepository.saved(song.title,song.artist,song.duration)
+                lyricsMessage="LRC imported and saved offline"
+            }
+        }
+    }
+    val lrcSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val song=current
+        if(uri!=null && song!=null)scope.launch {
+            val content=lyricsRepository.exportLrc(song.title,song.artist,song.duration) ?: lyrics?.plain ?: ""
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                context.contentResolver.openOutputStream(uri,"wt")?.bufferedWriter()?.use { it.write(content) }
+            }
+            lyricsMessage="Lyrics saved as a separate file"
+        }
+    }
     val tagPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         selectedTagUris = uris.filter { it.toString().isNotBlank() }
         tagStatus = if(selectedTagUris.isEmpty()) "No files selected" else "${selectedTagUris.size} files selected. Blank fields remain unchanged."
@@ -298,7 +325,8 @@ private fun PlayerApp(controller: MediaController?) {
                 }
             }
         }) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).padding(horizontal=18.dp).then(if(screen=="Settings") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 Spacer(Modifier.height(18.dp))
                 when(screen) {
                     "Square" -> {
@@ -443,7 +471,13 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }
                         }
-                        TextButton(onClick={lyricsVisible=!lyricsVisible}) { Text(if(lyricsVisible)"Hide lyrics" else "Show lyrics") }
+                        Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
+                            TextButton(onClick={lyricsVisible=!lyricsVisible}) { Text(if(lyricsVisible)"Hide lyrics" else "Show lyrics") }
+                            TextButton(onClick={lrcPicker.launch(arrayOf("text/*","application/octet-stream"))}) { Text("Import LRC") }
+                            TextButton(onClick={lrcSaver.launch("${current?.title ?: "lyrics"}.lrc")}) { Text("Save lyrics") }
+                            TextButton(onClick={dancerVisible=!dancerVisible}) { Text(if(dancerVisible)"Hide dancer" else "Dance") }
+                        }
+                        lyricsMessage?.let { Text(it,color=muted,fontSize=12.sp) }
                         Spacer(Modifier.height(8.dp))
                         val duration=(controller?.duration ?: 0L).coerceAtLeast(0L)
                         Slider(value=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f,
@@ -463,6 +497,10 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         Text("Playback speed: ${"%.2f".format(java.util.Locale.US,playbackSpeed)}×",color=muted)
                         Slider(value=playbackSpeed,onValueChange={playbackSpeed=it;controller?.setPlaybackSpeed(it)},valueRange=0.5f..2f)
+                        if(lyricsExpanded) {
+                            OutlinedTextField(value=manualLyrics,onValueChange={manualLyrics=it},label={Text("Paste or edit lyrics")},modifier=Modifier.fillMaxWidth())
+                            TextButton(onClick={current?.let { song -> lyricsRepository.savePlain(song.title,song.artist,song.duration,manualLyrics);lyrics=lyricsRepository.saved(song.title,song.artist,song.duration);lyricsMessage="Lyrics saved offline" }}) { Text("Save manual lyrics") }
+                        }
                         current?.let { song -> Text("Mood: ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",color=muted) }
                     }
                     else -> {
@@ -477,6 +515,12 @@ private fun PlayerApp(controller: MediaController?) {
 
                     }
                 }
+            }
+            if(dancerVisible && screen=="Now") {
+                Box(Modifier.align(Alignment.BottomEnd).padding(bottom=8.dp)) {
+                    DancingCompanion(playing=playing,onDismiss={dancerVisible=false})
+                }
+            }
             }
         }
         selectedForPlaylist?.let { song ->
