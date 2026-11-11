@@ -214,7 +214,7 @@ private fun PlayerApp(controller: MediaController?) {
                     }
                 }
                 NavigationBar(containerColor=Color(0xFF171728)) {
-                    listOf(Triple("Square",Icons.Default.GridView,"Square"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Now",Icons.Default.PlayCircle,"Player"),Triple("Settings",Icons.Default.Settings,"Settings")).forEach { (key,icon,title) ->
+                    listOf(Triple("Square",Icons.Default.GridView,"Square"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Now",Icons.Default.PlayCircle,"Player"),Triple("Tools",Icons.Default.Tune,"Tools")).forEach { (key,icon,title) ->
                         NavigationBarItem(selected=screen==key,onClick={screen=key},icon={Icon(icon,title)},label={Text(title)})
                     }
                 }
@@ -381,52 +381,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(12.dp))
                         Text("MusicSquare Player 0.3.0",color=Color.White)
                         Spacer(Modifier.height(16.dp))
-                        Text("Equalizer",fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
-                        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            listOf("Flat","Bass Boost","Treble Boost","Vocal","Rock","Jazz","Classical","Dance").forEach { p ->
-                                FilterChip(selected=preset==p,onClick={preset=p;eqPrefs.edit().putString("preset",p).apply()},label={Text(p)})
-                            }
-                        }
-                        Text("Bass: ${bass.toInt()}%",color=muted)
-                        Slider(value=bass,onValueChange={bass=it;eqPrefs.edit().putInt("bass",it.toInt()).apply()},valueRange=0f..100f)
-                        Text("Tag editor — writes ID3 tags into MP3 files",color=Color.White,fontSize=18.sp)
-                        OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/mpeg","audio/mp3","application/octet-stream"))}) { Text("Select one or multiple MP3 files") }
-                        Text("${selectedTagUris.size} selected",color=muted)
-                        OutlinedTextField(tagTitle,{tagTitle=it},label={Text("Title (blank = unchanged)")})
-                        OutlinedTextField(tagArtist,{tagArtist=it},label={Text("Artist")})
-                        OutlinedTextField(tagAlbum,{tagAlbum=it},label={Text("Album")})
-                        OutlinedTextField(tagYear,{tagYear=it},label={Text("Year")})
-                        OutlinedTextField(tagGenre,{tagGenre=it},label={Text("Genre")})
-                        Button(enabled=selectedTagUris.isNotEmpty() && !tagBusy,onClick={
-                            scope.launch {
-                                tagBusy=true
-                                val changes=TagChanges(title=tagTitle.takeIf{it.isNotBlank()},artist=tagArtist.takeIf{it.isNotBlank()},album=tagAlbum.takeIf{it.isNotBlank()},year=tagYear.takeIf{it.isNotBlank()},genre=tagGenre.takeIf{it.isNotBlank()})
-                                val results=tagEditor.writeBatch(selectedTagUris,changes)
-                                tagStatus="${results.count{it.success}}/${results.size} files updated. "+results.filterNot{it.success}.take(2).joinToString { it.message }
-                                tagBusy=false
-                                refresh()
-                            }
-                        }) { Text(if(tagBusy)"Writing tags..." else "Save embedded tags to files") }
-                        tagStatus?.let { Text(it,color=muted) }
-                        Spacer(Modifier.height(24.dp))
-                        Text("WAV Cutter & Speed",fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
-                        Text("Trim beginning/end, remove pauses longer than 1–2 seconds, or change speed. Exports a new WAV file. Speed changes pitch.",color=muted,fontSize=12.sp)
-                        OutlinedButton(onClick={wavPicker.launch(arrayOf("audio/wav","audio/x-wav","audio/wave"))}) { Text("Select PCM WAV") }
-                        Text(wavSource?.lastPathSegment ?: "No WAV selected",color=muted)
-                        OutlinedTextField(wavStart,{wavStart=it},label={Text("Start time (seconds)")})
-                        OutlinedTextField(wavEnd,{wavEnd=it},label={Text("End time (seconds; blank = end)")})
-                        OutlinedTextField(wavRemoveRanges,{wavRemoveRanges=it},label={Text("Remove middle ranges, e.g. 10-15, 40-45 (seconds)")})
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            Checkbox(checked=wavRemoveSilence,onCheckedChange={wavRemoveSilence=it})
-                            Text("Automatically remove long pauses",color=Color.White)
-                        }
-                        if(wavRemoveSilence) OutlinedTextField(wavSilenceSeconds,{wavSilenceSeconds=it},label={Text("Minimum pause duration (seconds)")})
-                        Text("Speed: ${"%.2f".format(java.util.Locale.US,wavSpeed)}×",color=muted)
-                        Slider(value=wavSpeed,onValueChange={wavSpeed=it},valueRange=0.25f..4f)
-                        Button(enabled=wavSource!=null && !wavBusy,onClick={wavSaver.launch("edited-audio.wav")}) {
-                            Text(if(wavBusy)"Processing…" else "Save edited WAV as new file")
-                        }
-                        wavStatus?.let { Text(it,color=muted) }
+
                     }
                 }
             }
