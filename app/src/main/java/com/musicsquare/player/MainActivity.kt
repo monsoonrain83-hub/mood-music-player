@@ -37,6 +37,8 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicsquare.player.audio.OfflineAudioAnalyzer
+import com.musicsquare.player.ml.PersonalMoodModel
+import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
@@ -97,6 +99,7 @@ private fun PlayerApp(controller: MediaController?) {
 
     val store = remember { MoodStore(context) }
     val analysisStore = remember { AnalysisStore(context) }
+    val trainingStore = remember { MoodTrainingStore(context) }
     val analyzer = remember { OfflineAudioAnalyzer(context) }
     val extras = remember { LibraryExtras(context) }
     val queueStore=remember { PlaybackQueueStore(context) }
@@ -562,6 +565,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     analysisProgress="Starting offline analysis"
                                     var successes=0
                                     try {
+                                        val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
                                             kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
                                             analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
@@ -569,8 +573,9 @@ private fun PlayerApp(controller: MediaController?) {
                                                 ?: analyzer.analyze(song.uri)?.also { analysisStore.save(song.id,song.duration,it) }
                                             if(result!=null) {
                                                 if(store.cell(song.id)==null) {
-                                                    // Energy-based provisional placement. Valence is unknown, not inferred.
-                                                    store.assign(song.id,MoodCoordinates.cell(result.valence ?: 0.5f,result.energy.coerceIn(0f,1f)))
+                                                    // User-trained supervised model abstains when evidence is insufficient.
+                                                    val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
+                                                    store.assign(song.id,prediction?.cell ?: MoodCoordinates.cell(result.valence ?: 0.5f,result.energy.coerceIn(0f,1f)))
                                                     assignmentsVersion++
                                                 }
                                                 successes++
@@ -581,7 +586,9 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             },modifier=Modifier.fillMaxWidth()) { Text("Analyze and populate mood grid") }
                         analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
-                        Text("Automatic cells use measured energy. Unknown valence stays neutral; manually assigned moods are preserved.",color=muted,fontSize=11.sp)
+                        Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
+                        Text("Local supervised nearest-neighbour learning, not a pretrained emotion detector. Unsupported songs remain neutral.",color=muted,fontSize=11.sp)
+                        TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
                         Spacer(Modifier.height(20.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             repeat(5) { row ->
@@ -1084,7 +1091,7 @@ private fun PlayerApp(controller: MediaController?) {
                 text={
                     Column(Modifier.heightIn(max=390.dp).verticalScroll(rememberScrollState())) {
                         names.forEachIndexed { index, name ->
-                            TextButton(onClick={store.assign(song.id,index);assignmentsVersion++;assignSong=null},modifier=Modifier.fillMaxWidth()) {
+                            TextButton(onClick={store.assign(song.id,index);trainingStore.label(song.id,index);assignmentsVersion++;assignSong=null},modifier=Modifier.fillMaxWidth()) {
                                 Text("${index+1}. $name")
                             }
                         }
