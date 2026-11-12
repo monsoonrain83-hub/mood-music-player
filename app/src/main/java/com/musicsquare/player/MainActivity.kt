@@ -639,6 +639,15 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
                         Spacer(Modifier.height(10.dp))
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Text("Equalizer",color=accent,fontWeight=FontWeight.Bold)
+                            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                listOf("Flat","Bass Boost","Treble Boost","Vocal","Rock","Jazz","Classical","Dance").forEach { option ->
+                                    FilterChip(selected=preset==option,onClick={preset=option;eqPrefs.edit().putString("preset",option).apply()},label={Text(option)})
+                                }
+                            }
+                            Text("Bass boost: ${bass.toInt()}%",color=muted)
+                            Slider(value=bass,onValueChange={bass=it;eqPrefs.edit().putInt("bass",it.toInt()).apply()},valueRange=0f..100f)
+                            HorizontalDivider()
                             Text("Batch tag editor • MP3, FLAC, WAV, OGG, M4A",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
                             Text("${selectedTagUris.size} selected",color=muted)
