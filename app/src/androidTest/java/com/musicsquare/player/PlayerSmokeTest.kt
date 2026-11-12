@@ -1,7 +1,6 @@
 package com.musicsquare.player
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -20,13 +19,13 @@ class PlayerSmokeTest {
     }
 
     @Test fun primaryNavigationRemainsReachable() {
-        rule.onNodeWithContentDescription("Mood").performClick()
+        rule.onNodeWithText("Mood").performClick()
         rule.onNodeWithText("Find your mood").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Studio").performClick()
+        rule.onNodeWithText("Studio").performClick()
         rule.onNodeWithText("Audio Studio").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Player").performClick()
-        rule.onNodeWithContentDescription("Library").performClick()
-        rule.onNodeWithContentDescription("Home").performClick()
+        rule.onNodeWithText("Player").performClick()
+        rule.onNodeWithText("Library").performClick()
+        rule.onNodeWithText("Home").performClick()
         rule.onNodeWithText("Your music, your mood").assertIsDisplayed()
     }
 }
