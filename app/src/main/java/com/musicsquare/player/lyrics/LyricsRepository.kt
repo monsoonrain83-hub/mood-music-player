@@ -62,10 +62,10 @@ class LyricsRepository(private val context:Context) {
    "[%02d:%02d.%02d] %s".format(java.util.Locale.US,min,sec,cent,line.text)
   }
  }
- suspend fun fetch(title:String,artist:String,album:String,durationMs:Long):Lyrics? =
+ suspend fun fetch(title:String,artist:String,album:String,durationMs:Long,forceRefresh:Boolean=false):Lyrics? =
   withContext(Dispatchers.IO) {
    val cacheKey=key(title,artist,durationMs)
-   prefs.getString(cacheKey,null)?.let { return@withContext decode(it,"Offline cache") }
+   if(!forceRefresh) prefs.getString(cacheKey,null)?.let { return@withContext decode(it,"Offline cache") }
    if(title.isBlank() || artist.isBlank())return@withContext null
    val params=listOf("track_name" to title,"artist_name" to artist).toMutableList()
    if(album.isNotBlank())params+="album_name" to album
