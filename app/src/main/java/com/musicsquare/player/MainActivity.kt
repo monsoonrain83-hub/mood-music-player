@@ -104,7 +104,9 @@ private fun PlayerApp(controller: MediaController?) {
     var lyricsLoading by remember { mutableStateOf(false) }
     var lyricsExpanded by remember { mutableStateOf(false) }
     var lyricsVisible by remember { mutableStateOf(true) }
-    var dancerVisible by remember { mutableStateOf(true) }
+    val dancerPrefs = remember { context.getSharedPreferences("dancer_settings",android.content.Context.MODE_PRIVATE) }
+    var dancerVisible by remember { mutableStateOf(dancerPrefs.getBoolean("visible",true)) }
+    LaunchedEffect(dancerVisible) { dancerPrefs.edit().putBoolean("visible",dancerVisible).apply() }
     var manualLyrics by remember { mutableStateOf("") }
     var lyricsMessage by remember { mutableStateOf<String?>(null) }
     var lyricsOffset by remember { mutableLongStateOf(0L) }
@@ -374,11 +376,15 @@ private fun PlayerApp(controller: MediaController?) {
         lyrics=null
         lyricsOffset=if(song!=null)lyricsRepository.offsetMs(song.title,song.artist,song.duration) else 0L
         if(song!=null) {
-            lyrics=lyricsRepository.saved(song.title,song.artist,song.duration)
-            if(lyrics==null) {
+            val cached=lyricsRepository.saved(song.title,song.artist,song.duration)
+            lyrics=cached
+            // A user-triggered search must check online even when plain lyrics are cached.
+            if(cached==null || lyricsSearchVersion>0) {
                 lyricsLoading=true
-                lyrics=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration)
-                lyricsLoading=false
+                try {
+                    val fetched=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration)
+                    if(fetched!=null) lyrics=fetched
+                } finally { lyricsLoading=false }
             }
         }
     }
@@ -592,7 +598,13 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                     }
                     "Now" -> {
-                        Text("Now Playing",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Now Playing",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                            TextButton(onClick={dancerVisible=!dancerVisible}) {
+                                Icon(Icons.Default.Person,contentDescription="Toggle dancer",tint=accent)
+                                Text(if(dancerVisible)"Hide dancer" else "Show dancer")
+                            }
+                        }
                         Spacer(Modifier.height(8.dp))
                         com.musicsquare.player.visual.LocalArtwork(
                             uri=current?.uri,
