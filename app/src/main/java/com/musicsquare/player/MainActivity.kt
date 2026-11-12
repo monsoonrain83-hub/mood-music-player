@@ -155,7 +155,7 @@ private fun PlayerApp(controller: MediaController?) {
     var songs by remember { mutableStateOf<List<LocalSong>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var screen by remember { mutableStateOf("Square") }
+    var screen by remember { mutableStateOf("Home") }
     var selectedCell by remember { mutableIntStateOf(-1) }
     var moodValence by remember { mutableFloatStateOf(0.5f) }
     var moodEnergy by remember { mutableFloatStateOf(0.5f) }
@@ -430,16 +430,66 @@ private fun PlayerApp(controller: MediaController?) {
                     )
                 }
                 NavigationBar(containerColor=Color(0xFF171728)) {
-                    listOf(Triple("Square",Icons.Default.GridView,"Square"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Now",Icons.Default.PlayCircle,"Player"),Triple("Tools",Icons.Default.Tune,"Tools")).forEach { (key,icon,title) ->
+                    listOf(Triple("Home",Icons.Default.Home,"Home"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Square",Icons.Default.GridView,"Mood"),Triple("Tools",Icons.Default.Tune,"Studio")).forEach { (key,icon,title) ->
                         NavigationBarItem(selected=screen==key,onClick={screen=key},icon={Icon(icon,title)},label={Text(title)})
                     }
                 }
             }
         }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
-            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings" || screen=="Now") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings" || screen=="Now" || screen=="Home") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 Spacer(Modifier.height(18.dp))
                 when(screen) {
+                    "Home" -> {
+                        Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=accent)
+                        Text("Your music, your mood",fontSize=29.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Spacer(Modifier.height(12.dp))
+                        Text("${songs.size} songs in your library",color=muted)
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick={screen="Library"},modifier=Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.LibraryMusic,null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Browse your library")
+                        }
+                        OutlinedButton(onClick={screen="Square"},modifier=Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.GridView,null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Explore the 5 × 5 mood grid")
+                        }
+                        OutlinedButton(onClick={screen="Tools"},modifier=Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Tune,null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Audio Studio")
+                        }
+                        if(current!=null) {
+                            Spacer(Modifier.height(16.dp))
+                            Text("Continue listening",color=Color.White,fontWeight=FontWeight.Bold)
+                            current?.let { song ->
+                                Row(Modifier.fillMaxWidth().clickable { screen="Now" }.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                                    com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(song.title,color=Color.White,maxLines=1)
+                                        Text(song.artist,color=muted,maxLines=1)
+                                    }
+                                    Icon(Icons.Default.ChevronRight,null,tint=accent)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text("Recently scanned",color=Color.White,fontWeight=FontWeight.Bold)
+                        songs.take(8).forEach { song ->
+                            Row(Modifier.fillMaxWidth().clickable { play(songs,songs.indexOf(song)) }.padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
+                                com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(song.title,color=Color.White,maxLines=1)
+                                    Text(song.artist,color=muted,fontSize=12.sp,maxLines=1)
+                                }
+                                Icon(Icons.Default.PlayArrow,null,tint=accent)
+                            }
+                        }
+                    }
                     "Square" -> {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=Color.White)
