@@ -23,6 +23,16 @@ class LibraryExtras(context: Context) {
  fun add(name:String,id:Long) {
   prefs.edit().putString("playlist_$name",JSONArray((playlist(name)+id).toList()).toString()).apply()
  }
+ fun deletePlaylist(name:String) {
+  prefs.edit().putString("playlist_names",JSONArray(playlistNames().filterNot { it==name }).toString()).remove("playlist_$name").apply()
+ }
+ fun renamePlaylist(old:String,new:String) {
+  val target=new.trim()
+  val names=playlistNames()
+  if(target==old || target.isBlank() || old !in names || target in names)return
+  prefs.edit().putString("playlist_names",JSONArray(names.map { if(it==old)target else it }).toString())
+   .putString("playlist_$target",JSONArray(playlist(old).toList()).toString()).remove("playlist_$old").apply()
+ }
  fun remove(name:String,id:Long) {
   prefs.edit().putString("playlist_$name",JSONArray((playlist(name)-id).toList()).toString()).apply()
  }
