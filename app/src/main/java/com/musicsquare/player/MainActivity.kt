@@ -382,7 +382,7 @@ private fun PlayerApp(controller: MediaController?) {
             if(cached==null || lyricsSearchVersion>0) {
                 lyricsLoading=true
                 try {
-                    val fetched=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration)
+                    val fetched=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration,forceRefresh=lyricsSearchVersion>0)
                     if(fetched!=null) lyrics=fetched
                 } finally { lyricsLoading=false }
             }
