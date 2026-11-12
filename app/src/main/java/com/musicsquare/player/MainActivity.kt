@@ -811,6 +811,9 @@ private fun PlayerApp(controller: MediaController?) {
                                         IconButton(onClick={
                                             if(index>0)controller.moveMediaItem(index,index-1)
                                         },enabled=index>0) { Icon(Icons.Default.KeyboardArrowUp,"Move up",tint=accent) }
+                                        IconButton(onClick={controller.moveMediaItem(index,index+1)},enabled=index<controller.mediaItemCount-1) {
+                                            Icon(Icons.Default.KeyboardArrowDown,"Move down",tint=accent)
+                                        }
                                         IconButton(onClick={controller.removeMediaItem(index)}) { Icon(Icons.Default.Close,"Remove from queue",tint=accent) }
                                     }
                                 }
