@@ -40,6 +40,7 @@ import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
+import com.musicsquare.player.domain.MoodCoordinates
 import com.musicsquare.player.data.LibraryBackup
 import com.musicsquare.player.data.PlaybackQueueStore
 import com.musicsquare.player.data.LibraryExtras
@@ -441,9 +442,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Slider(value=moodValence,onValueChange={moodValence=it})
                         Text("Energy",color=muted,fontSize=12.sp)
                         Slider(value=moodEnergy,onValueChange={moodEnergy=it})
-                        val mappedRow=(4-(moodValence*5).toInt().coerceIn(0,4))
-                        val mappedCol=(moodEnergy*5).toInt().coerceIn(0,4)
-                        TextButton(onClick={selectedCell=mappedRow*5+mappedCol}) { Text("Select cell from mood coordinates") }
+                        TextButton(onClick={selectedCell=MoodCoordinates.cell(moodValence,moodEnergy)}) { Text("Select cell from mood coordinates") }
                         Spacer(Modifier.height(12.dp))
                         Button(enabled=selectedCell>=0 && songs.any { store.cell(it.id)==selectedCell } && controller!=null,
                             onClick={play(songs.filter { store.cell(it.id)==selectedCell })},modifier=Modifier.fillMaxWidth()) {
