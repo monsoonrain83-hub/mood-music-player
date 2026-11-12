@@ -779,7 +779,12 @@ private fun PlayerApp(controller: MediaController?) {
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                             clipData=android.content.ClipData.newUri(context.contentResolver,song.title,song.uri)
                                         }
-                                        context.startActivity(Intent.createChooser(intent,"Send audio file"))
+                                        try {
+                                            context.startActivity(Intent.createChooser(intent,"Send audio file"))
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("MusicSquareShare","Cannot share audio",e)
+                                            android.widget.Toast.makeText(context,"Unable to share this audio file",android.widget.Toast.LENGTH_LONG).show()
+                                        }
                                     }) { Icon(Icons.Default.Share,"Share audio file",tint=accent) }
                                     IconButton(onClick={selectedForPlaylist=song}) { Icon(Icons.Default.PlaylistAdd,"Add to playlist",tint=accent) }
                                     TextButton(onClick={assignSong=song}) { Text("Mood") }
