@@ -1,1 +1,1 @@
-<resources><string name="app_name">MusicSquare Player</string></resources>
+<resources><string name="app_name">MusicSquare Player</string><string name="widget_1x4_description">Music controls 4 × 1</string><string name="widget_2x4_description">Music player 4 × 2</string><string name="widget_4x4_description">Large music player 4 × 4</string></resources>
