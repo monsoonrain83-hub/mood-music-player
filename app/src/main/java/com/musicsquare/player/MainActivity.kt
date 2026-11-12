@@ -137,6 +137,7 @@ private fun PlayerApp(controller: MediaController?) {
     var studioPage by remember { mutableStateOf("Home") }
     var lyricsSearchVersion by remember { mutableIntStateOf(0) }
     var selectedGroup by remember { mutableStateOf("All") }
+    var selectedArtistAlbum by remember { mutableStateOf<String?>(null) }
     var playlistName by remember { mutableStateOf("") }
     var selectedPlaylist by remember { mutableStateOf<String?>(null) }
     var selectedForPlaylist by remember { mutableStateOf<LocalSong?>(null) }
@@ -495,7 +496,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Your Library",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
                         Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                             listOf("All","Folder","Artist","Album","Genre","Year","Most played","Favorites","Playlists").forEach { option ->
-                                FilterChip(selected=grouping==option,onClick={grouping=option;selectedGroup="All"},label={Text(option)})
+                                FilterChip(selected=grouping==option,onClick={grouping=option;selectedGroup="All";selectedArtistAlbum=null},label={Text(option)})
                             }
                         }
                         if(grouping=="Playlists") {
@@ -519,8 +520,28 @@ private fun PlayerApp(controller: MediaController?) {
                             else -> emptyList()
                         }.sorted()
                         if(groupOptions.isNotEmpty() && selectedGroup!="All") {
-                            TextButton(onClick={selectedGroup="All"}) { Text("‹ Back to $grouping",color=accent) }
+                            TextButton(onClick={selectedGroup="All";selectedArtistAlbum=null}) { Text("‹ Back to $grouping",color=accent) }
                             Text(selectedGroup,fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                        }
+                        if(grouping=="Artist" && selectedGroup!="All") {
+                            val artistAlbums=songs.filter { it.artist==selectedGroup }.map { it.album }.distinct().sorted()
+                            if(selectedArtistAlbum!=null) {
+                                TextButton(onClick={selectedArtistAlbum=null}) { Text("‹ All albums by $selectedGroup") }
+                                Text(selectedArtistAlbum ?: "",fontSize=18.sp,color=accent)
+                            } else {
+                                Text("Albums",fontSize=18.sp,color=accent,fontWeight=FontWeight.Bold)
+                                artistAlbums.forEach { album ->
+                                    Row(Modifier.fillMaxWidth().clickable { selectedArtistAlbum=album }.padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Album,null,tint=accent)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(album,color=Color.White)
+                                            Text("${songs.count { it.artist==selectedGroup && it.album==album }} tracks",color=muted,fontSize=12.sp)
+                                        }
+                                        Icon(Icons.Default.ChevronRight,null,tint=accent)
+                                    }
+                                }
+                            }
                         }
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("${songs.size} local songs",color=muted,modifier=Modifier.weight(1f))
@@ -548,7 +569,7 @@ private fun PlayerApp(controller: MediaController?) {
                         val filtered=songs.filter { song ->
                             (searchQuery.isBlank() || song.title.contains(searchQuery,true) || song.artist.contains(searchQuery,true) || song.album.contains(searchQuery,true)) && when(grouping) {
                                 "Folder" -> selectedGroup=="All" || song.folder==selectedGroup
-                                "Artist" -> selectedGroup=="All" || song.artist==selectedGroup
+                                "Artist" -> (selectedGroup=="All" || song.artist==selectedGroup) && (selectedArtistAlbum==null || song.album==selectedArtistAlbum)
                                 "Album" -> selectedGroup=="All" || song.album==selectedGroup
                                 "Genre" -> selectedGroup=="All" || song.genre==selectedGroup
                                 "Year" -> selectedGroup=="All" || song.year.toString()==selectedGroup
@@ -570,9 +591,9 @@ private fun PlayerApp(controller: MediaController?) {
                                         Icon(Icons.Default.ChevronRight,null,tint=accent)
                                     }
                                 }
-                            } else items(filtered,key={it.id}) { song ->
+                            } else if(grouping!="Artist" || selectedArtistAlbum!=null) items(filtered,key={it.id}) { song ->
                                 Row(Modifier.fillMaxWidth().clickable { play(filtered,filtered.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
-                                    Icon(Icons.Default.MusicNote,null,tint=accent,modifier=Modifier.size(36.dp))
+                                    com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(song.title,color=Color.White,maxLines=1,overflow=TextOverflow.Ellipsis)
