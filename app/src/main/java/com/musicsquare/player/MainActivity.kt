@@ -105,7 +105,7 @@ private fun PlayerApp(controller: MediaController?) {
     var lyricsExpanded by remember { mutableStateOf(false) }
     var lyricsVisible by remember { mutableStateOf(true) }
     val dancerPrefs = remember { context.getSharedPreferences("dancer_settings",android.content.Context.MODE_PRIVATE) }
-    var dancerVisible by remember { mutableStateOf(dancerPrefs.getBoolean("visible",true)) }
+    var dancerVisible by remember { mutableStateOf(false) }
     LaunchedEffect(dancerVisible) { dancerPrefs.edit().putBoolean("visible",dancerVisible).apply() }
     var manualLyrics by remember { mutableStateOf("") }
     var lyricsMessage by remember { mutableStateOf<String?>(null) }
@@ -395,11 +395,24 @@ private fun PlayerApp(controller: MediaController?) {
             MediaItem.Builder().setUri(song.uri).setMediaId(song.id.toString())
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).build()).build()
         }
-        controller?.apply { setMediaItems(items, index.coerceIn(0,items.lastIndex), 0); prepare(); play() }
-        repeatFolder=false
-        current = list[index.coerceIn(0,list.lastIndex)]
-        extras.played(current!!.id)
-        screen = "Now"
+        val player = controller
+        if (player == null) {
+            error = "Audio service is still connecting. Try again in a moment."
+            return
+        }
+        try {
+            player.setMediaItems(items, index.coerceIn(0,items.lastIndex), 0)
+            player.prepare()
+            player.play()
+            repeatFolder=false
+            current = list[index.coerceIn(0,list.lastIndex)]
+            extras.played(current!!.id)
+            error = null
+            screen = "Now"
+        } catch (e: Exception) {
+            error = "Could not start playback: " + (e.localizedMessage ?: e.javaClass.simpleName)
+            android.util.Log.e("MusicSquarePlayback", "Unable to play selected audio", e)
+        }
     }
     MaterialTheme(colorScheme = darkColorScheme(primary=accent,background=bg,surface=surface)) {
         Scaffold(containerColor=bg, bottomBar={
