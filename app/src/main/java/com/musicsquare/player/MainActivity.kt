@@ -509,7 +509,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             if(result!=null) {
                                                 if(store.cell(song.id)==null) {
                                                     // Energy-based provisional placement. Valence is unknown, not inferred.
-                                                    store.assign(song.id,MoodCoordinates.cell(0.5f,result.energy.coerceIn(0f,1f)))
+                                                    store.assign(song.id,MoodCoordinates.cell(result.valence ?: 0.5f,result.energy.coerceIn(0f,1f)))
                                                     assignmentsVersion++
                                                 }
                                                 successes++
@@ -520,7 +520,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             },modifier=Modifier.fillMaxWidth()) { Text("Analyze and populate mood grid") }
                         analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
-                        Text("Automatic cells use measured energy with neutral (unknown) happiness; not an AI valence prediction.",color=muted,fontSize=11.sp)
+                        Text("Automatic cells use measured energy. Unknown valence stays neutral; manually assigned moods are preserved.",color=muted,fontSize=11.sp)
                         Spacer(Modifier.height(20.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             repeat(5) { row ->
