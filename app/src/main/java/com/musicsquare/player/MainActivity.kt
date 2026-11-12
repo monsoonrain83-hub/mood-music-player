@@ -705,7 +705,12 @@ private fun PlayerApp(controller: MediaController?) {
                             Text("${filtered.size} matching songs",color=accent,fontSize=12.sp)
                             if(filtered.isEmpty()) Text("No matching audio found. Try a different title or artist.",color=muted,fontSize=12.sp)
                         }
-                        LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                        val azGroups = groupOptions.isNotEmpty() && selectedGroup=="All" && searchQuery.isBlank()
+                        val azSource = if(azGroups) groupOptions else filtered.map { it.title }
+                        val azLetters = azSource.mapNotNull { it.trim().firstOrNull()?.uppercaseChar()?.toString() }.distinct().sorted()
+                        val azState = androidx.compose.foundation.lazy.rememberLazyListState()
+                        Row(Modifier.fillMaxWidth()) {
+                        LazyColumn(state=azState,modifier=Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             if(groupOptions.isNotEmpty() && selectedGroup=="All" && searchQuery.isBlank()) {
                                 items(groupOptions) { group ->
                                     Row(Modifier.fillMaxWidth().clickable { selectedGroup=group }.padding(vertical=14.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -743,6 +748,19 @@ private fun PlayerApp(controller: MediaController?) {
                                     TextButton(onClick={assignSong=song}) { Text("Mood") }
                                 }
                             }
+                        }
+                        if(azLetters.size>1) {
+                            Column(Modifier.width(30.dp).verticalScroll(rememberScrollState()),horizontalAlignment=Alignment.CenterHorizontally) {
+                                azLetters.forEach { letter ->
+                                    TextButton(onClick={
+                                        val position=azSource.indexOfFirst { it.trim().startsWith(letter,ignoreCase=true) }
+                                        if(position>=0) scope.launch { azState.scrollToItem(position) }
+                                    },contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp)) {
+                                        Text(letter,color=accent,fontSize=11.sp)
+                                    }
+                                }
+                            }
+                        }
                         }
                     }
                     "Now" -> {
