@@ -461,6 +461,10 @@ private fun PlayerApp(controller: MediaController?) {
                     "Home" -> {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=accent)
                         Text("Your music, your mood",fontSize=29.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        TextButton(onClick={screen="Settings"}) {
+                            Icon(Icons.Default.Settings,contentDescription="Settings",tint=accent)
+                            Text("Settings & home screen widgets")
+                        }
                         Spacer(Modifier.height(12.dp))
                         Text("${songs.size} songs in your library",color=muted)
                         Spacer(Modifier.height(12.dp))
@@ -507,6 +511,28 @@ private fun PlayerApp(controller: MediaController?) {
                                 Icon(Icons.Default.PlayArrow,null,tint=accent)
                             }
                         }
+                    }
+                    "Settings" -> {
+                        Text("Settings",fontSize=28.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Home screen widgets",fontSize=20.sp,color=accent)
+                        Text("Choose a widget size below. On Android 8 and later, the system can ask to pin it to your home screen. You can also add all three from your phone's Widgets menu.",color=muted)
+                        listOf(
+                            Triple("4 × 1 • Compact controls",com.musicsquare.player.widgets.Widget1x4::class.java,1),
+                            Triple("4 × 2 • Player",com.musicsquare.player.widgets.Widget2x4::class.java,2),
+                            Triple("4 × 4 • Large player",com.musicsquare.player.widgets.Widget4x4::class.java,4)
+                        ).forEach { (label,widgetClass,_) ->
+                            OutlinedButton(onClick={
+                                if(Build.VERSION.SDK_INT>=26) {
+                                    val manager=context.getSystemService(android.appwidget.AppWidgetManager::class.java)
+                                    val provider=ComponentName(context,widgetClass)
+                                    if(manager.isRequestPinAppWidgetSupported) manager.requestPinAppWidget(provider,null,null)
+                                    else android.widget.Toast.makeText(context,"Open your launcher Widgets menu to add MusicSquare",android.widget.Toast.LENGTH_LONG).show()
+                                } else {
+                                    android.widget.Toast.makeText(context,"Open your launcher Widgets menu to add MusicSquare",android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            },modifier=Modifier.fillMaxWidth()) { Text(label) }
+                        }
+                        TextButton(onClick={screen="Home"}) { Text("Back to Home") }
                     }
                     "Square" -> {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
