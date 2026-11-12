@@ -87,6 +87,13 @@ class MainActivity : ComponentActivity() {
 private fun PlayerApp(controller: MediaController?) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val appearancePrefs = remember { context.getSharedPreferences("appearance",android.content.Context.MODE_PRIVATE) }
+    var skin by remember { mutableStateOf(appearancePrefs.getString("skin","Midnight") ?: "Midnight") }
+    val bg = when(skin) { "Daylight" -> Color(0xFFF7F5FC); "Ocean" -> Color(0xFF071D2B); "Rose" -> Color(0xFF251522); else -> Color(0xFF0C0C18) }
+    val surface = when(skin) { "Daylight" -> Color(0xFFE5DFF1); "Ocean" -> Color(0xFF143B50); "Rose" -> Color(0xFF493044); else -> Color(0xFF20203A) }
+    val accent = when(skin) { "Daylight" -> Color(0xFF7145B0); "Ocean" -> Color(0xFF69D9E9); "Rose" -> Color(0xFFFFA1C7); else -> Color(0xFFC6A4FF) }
+    val muted = when(skin) { "Daylight" -> Color(0xFF655D76); "Ocean" -> Color(0xFFAFD0DF); "Rose" -> Color(0xFFD8B6CC); else -> Color(0xFFB5B2D3) }
+
     val store = remember { MoodStore(context) }
     val analysisStore = remember { AnalysisStore(context) }
     val analyzer = remember { OfflineAudioAnalyzer(context) }
@@ -514,6 +521,15 @@ private fun PlayerApp(controller: MediaController?) {
                     }
                     "Settings" -> {
                         Text("Settings",fontSize=28.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Appearance & skins",fontSize=20.sp,color=accent)
+                        Text("Choose a look. Your selection is saved for next launch.",color=muted)
+                        Row(horizontalArrangement=Arrangement.spacedBy(5.dp),modifier=Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                            listOf("Midnight","Daylight","Ocean","Rose").forEach { option ->
+                                OutlinedButton(onClick={skin=option;appearancePrefs.edit().putString("skin",option).apply()}) {
+                                    Text(if(skin==option)"✓ $option" else option)
+                                }
+                            }
+                        }
                         Text("Home screen widgets",fontSize=20.sp,color=accent)
                         Text("Choose a widget size below. On Android 8 and later, the system can ask to pin it to your home screen. You can also add all three from your phone's Widgets menu.",color=muted)
                         listOf(
