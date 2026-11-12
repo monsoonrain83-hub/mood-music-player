@@ -563,13 +563,13 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                     }
                     "Now" -> {
-                        Text("Now Playing",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
-                        Spacer(Modifier.height(32.dp))
-                        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF55418B),RoundedCornerShape(28.dp)),contentAlignment=Alignment.Center) {
-                            Icon(Icons.Default.MusicNote,"Album art placeholder",tint=Color.White,modifier=Modifier.size(120.dp))
+                        Text("Now Playing",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.fillMaxWidth().heightIn(max=156.dp).height(156.dp).background(Color(0xFF55418B),RoundedCornerShape(20.dp)),contentAlignment=Alignment.Center) {
+                            Icon(Icons.Default.MusicNote,"Album art placeholder",tint=Color.White,modifier=Modifier.size(68.dp))
                         }
-                        Spacer(Modifier.height(26.dp))
-                        Text(current?.title ?: "No song selected",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White,maxLines=2)
+                        Spacer(Modifier.height(8.dp))
+                        Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=Color.White,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
                         Spacer(Modifier.height(10.dp))
                         if(lyricsVisible) {
@@ -593,7 +593,12 @@ private fun PlayerApp(controller: MediaController?) {
                         Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
                             TextButton(onClick={lyricsVisible=!lyricsVisible}) { Text(if(lyricsVisible)"Hide lyrics" else "Show lyrics") }
                             TextButton(onClick={lrcPicker.launch(arrayOf("text/*","application/octet-stream"))}) { Text("Import LRC") }
-                             TextButton(onClick={lyricsSearchVersion++}) { Text("Search lyrics online") }
+                             TextButton(onClick={lyricsSearchVersion++}) { Text("Find synced lyrics") }
+                            TextButton(onClick={current?.let { song ->
+                                val query=java.net.URLEncoder.encode("${song.artist} ${song.title} lyrics متن آهنگ","UTF-8")
+                                val url=Uri.parse("https://www.google.com/search?q=$query")
+                                context.startActivity(Intent(Intent.ACTION_VIEW,url))
+                            }}) { Text("Web lyrics") }
                             TextButton(onClick={lrcSaver.launch("${current?.title ?: "lyrics"}.lrc")}) { Text("Save lyrics") }
                             TextButton(onClick={dancerVisible=!dancerVisible}) { Text(if(dancerVisible)"Hide dancer" else "Dance") }
                         }
