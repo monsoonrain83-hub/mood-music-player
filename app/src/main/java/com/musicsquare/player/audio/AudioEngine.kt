@@ -7,12 +7,60 @@ import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
 
 /**
  * Offline audio processing using maintained FFmpegKit.
  * All output goes to a newly selected SAF document, never overwriting the input.
  */
 class AudioEngine(private val context:Context) {
+ private fun digest(file:File):ByteArray {
+  val hash=MessageDigest.getInstance("SHA-256")
+  file.inputStream().use { stream ->
+   val buffer=ByteArray(64*1024)
+   while(true) {
+    val count=stream.read(buffer)
+    if(count<0)break
+    if(count>0)hash.update(buffer,0,count)
+   }
+  }
+  return hash.digest()
+ }
+
+ /** SAF document overwrites are not atomic; preserve a rollback copy. */
+ private fun replaceAndVerify(uri:Uri,newFile:File,original:File) {
+  fun overwrite(file:File) {
+   val pfd=context.contentResolver.openFileDescriptor(uri,"rwt")
+    ?: error("Provider does not support truncate/write")
+   pfd.use { descriptor ->
+    file.inputStream().use { input ->
+     FileOutputStream(descriptor.fileDescriptor).use { output ->
+      input.copyTo(output)
+      output.flush()
+      output.fd.sync()
+     }
+    }
+   }
+  }
+  val expected=digest(newFile)
+  try {
+   overwrite(newFile)
+   val readBack=File.createTempFile("audio_verify_",".tmp",context.cacheDir)
+   try {
+    context.contentResolver.openInputStream(uri)?.use { input ->
+     readBack.outputStream().use { input.copyTo(it) }
+    } ?: error("Cannot read modified document")
+    check(expected.contentEquals(digest(readBack))) { "Saved document differs from generated file" }
+   } finally { readBack.delete() }
+  } catch(writeFailure:Exception) {
+   val restoreFailure=runCatching { overwrite(original) }.exceptionOrNull()
+   if(restoreFailure!=null)
+    error("Metadata write failed AND restoration failed: ${writeFailure.message}; ${restoreFailure.message}")
+   error("Metadata write failed; restored original: ${writeFailure.message}")
+  }
+ }
+
  enum class Format(val ext:String,val mime:String,val codec:String) {
   MP3("mp3","audio/mpeg","libmp3lame"),
   WAV("wav","audio/wav","pcm_s16le"),
@@ -104,22 +152,27 @@ class AudioEngine(private val context:Context) {
         if(value!=null)command+=listOf("-metadata","$key=$value")
        }
      }
-     if(tags!=null)command+=listOf("-c:a","copy")
+     if(tags!=null)command+=listOf("-map","0","-c","copy")
      else {
       command+=listOf("-c:a",format.codec)
       if(format in listOf(Format.MP3,Format.M4A,Format.OGG))
        command+=listOf("-b:a","${bitrate}k")
      }
-     command+=listOf("-vn",output.absolutePath)
+     if(tags==null)command+="-vn"
+     command+=output.absolutePath
      // FFmpegKit argument API avoids shell escaping and injection.
      val session=FFmpegKit.executeWithArguments(command.toTypedArray())
      require(ReturnCode.isSuccess(session.returnCode)) {
       "FFmpeg error: ${session.allLogsAsString.takeLast(600)}"
      }
      require(output.length()>0) { "Empty output" }
-     context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
-      output.inputStream().use { it.copyTo(stream) }
-     } ?: error("Cannot write destination")
+     if(tags!=null && source==destination) {
+      replaceAndVerify(destination,output,input)
+     } else {
+      context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
+       output.inputStream().use { it.copyTo(stream) }
+      } ?: error("Cannot write destination")
+     }
     } finally { input.delete();output.delete() }
     Unit
    }
