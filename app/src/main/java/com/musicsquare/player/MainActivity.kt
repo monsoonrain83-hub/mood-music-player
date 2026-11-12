@@ -414,6 +414,11 @@ private fun PlayerApp(controller: MediaController?) {
             android.util.Log.e("MusicSquarePlayback", "Unable to play selected audio", e)
         }
     }
+    LaunchedEffect(error) {
+        if (error != null) {
+            android.util.Log.w("MusicSquarePlayback", error!!)
+        }
+    }
     MaterialTheme(colorScheme = darkColorScheme(primary=accent,background=bg,surface=surface)) {
         Scaffold(containerColor=bg, bottomBar={
             Column {
