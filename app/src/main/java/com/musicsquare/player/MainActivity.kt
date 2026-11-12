@@ -642,11 +642,11 @@ private fun PlayerApp(controller: MediaController?) {
                             "Playlists" -> extras.playlistNames().also { playlistVersion }
                             else -> emptyList()
                         }.sorted()
-                        if(groupOptions.isNotEmpty() && selectedGroup!="All") {
+                        if(groupOptions.isNotEmpty() && selectedGroup!="All" && searchQuery.isBlank()) {
                             TextButton(onClick={selectedGroup="All";selectedArtistAlbum=null}) { Text("‹ Back to $grouping",color=accent) }
                             Text(selectedGroup,fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
                         }
-                        if(grouping=="Artist" && selectedGroup!="All") {
+                        if(grouping=="Artist" && selectedGroup!="All" && searchQuery.isBlank()) {
                             val artistAlbums=songs.filter { it.artist==selectedGroup }.map { it.album }.distinct().sorted()
                             if(selectedArtistAlbum!=null) {
                                 TextButton(onClick={selectedArtistAlbum=null}) { Text("‹ All albums by $selectedGroup") }
@@ -690,7 +690,7 @@ private fun PlayerApp(controller: MediaController?) {
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
-                            (searchQuery.isBlank() || song.title.contains(searchQuery,true) || song.artist.contains(searchQuery,true) || song.album.contains(searchQuery,true)) && when(grouping) {
+                            (searchQuery.isBlank() || song.title.contains(searchQuery.trim(),true) || song.artist.contains(searchQuery.trim(),true) || song.album.contains(searchQuery.trim(),true) || song.folder.contains(searchQuery.trim(),true) || song.genre.contains(searchQuery.trim(),true)) && (searchQuery.isNotBlank() || when(grouping) {
                                 "Folder" -> selectedGroup=="All" || song.folder==selectedGroup
                                 "Artist" -> (selectedGroup=="All" || song.artist==selectedGroup) && (selectedArtistAlbum==null || song.album==selectedArtistAlbum)
                                 "Album" -> selectedGroup=="All" || song.album==selectedGroup
@@ -699,10 +699,14 @@ private fun PlayerApp(controller: MediaController?) {
                                 "Favorites" -> favorites.getBoolean(song.id.toString(),false)
                                 "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
                                 else -> true
-                            }
-                        }.let { list -> if(grouping=="Most played")list.sortedByDescending { extras.plays(it.id) } else list }
+                            })
+                        }.let { list -> if(grouping=="Most played" && searchQuery.isBlank())list.sortedByDescending { extras.plays(it.id) } else list }
+                        if(searchQuery.isNotBlank()) {
+                            Text("${filtered.size} matching songs",color=accent,fontSize=12.sp)
+                            if(filtered.isEmpty()) Text("No matching audio found. Try a different title or artist.",color=muted,fontSize=12.sp)
+                        }
                         LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            if(groupOptions.isNotEmpty() && selectedGroup=="All") {
+                            if(groupOptions.isNotEmpty() && selectedGroup=="All" && searchQuery.isBlank()) {
                                 items(groupOptions) { group ->
                                     Row(Modifier.fillMaxWidth().clickable { selectedGroup=group }.padding(vertical=14.dp),verticalAlignment=Alignment.CenterVertically) {
                                         Icon(Icons.Default.FolderOpen,null,tint=accent)
@@ -714,7 +718,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         Icon(Icons.Default.ChevronRight,null,tint=accent)
                                     }
                                 }
-                            } else if(grouping!="Artist" || selectedArtistAlbum!=null) items(filtered,key={it.id}) { song ->
+                            } else if(searchQuery.isNotBlank() || grouping!="Artist" || selectedArtistAlbum!=null) items(filtered,key={it.id}) { song ->
                                 Row(Modifier.fillMaxWidth().clickable { play(filtered,filtered.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                                     com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
                                     Spacer(Modifier.width(10.dp))
