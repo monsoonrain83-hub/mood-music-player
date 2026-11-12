@@ -8,6 +8,8 @@ import com.mpatric.mp3agic.ID3v24Tag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
 import android.provider.OpenableColumns
 import com.musicsquare.player.audio.AudioEngine
 
@@ -44,6 +46,33 @@ class TagEditor(private val context:Context) {
    }
   }
 
+ private fun sha256(file:File):ByteArray {
+  val digest=MessageDigest.getInstance("SHA-256")
+  file.inputStream().use { input ->
+   val chunk=ByteArray(64*1024)
+   while(true) {
+    val count=input.read(chunk)
+    if(count<0)break
+    if(count>0)digest.update(chunk,0,count)
+   }
+  }
+  return digest.digest()
+ }
+
+ private fun writeExact(uri:Uri,file:File) {
+  val descriptor=context.contentResolver.openFileDescriptor(uri,"rwt")
+   ?: error("Document provider does not support write/truncate")
+  descriptor.use { pfd ->
+   file.inputStream().use { input ->
+    FileOutputStream(pfd.fileDescriptor).use { output ->
+     input.copyTo(output)
+     output.flush()
+     output.fd.sync()
+    }
+   }
+  }
+ }
+
  private suspend fun writeOne(uri:Uri,changes:TagChanges):TagResult {
   val fmt=format(uri) ?: return TagResult(uri,false,"Unsupported format; use MP3, WAV, FLAC, OGG or M4A")
   if(fmt!=AudioEngine.Format.MP3) {
@@ -68,20 +97,44 @@ class TagEditor(private val context:Context) {
    mp3.id3v2Tag=tag
    modified.delete()
    mp3.save(modified.absolutePath)
-   // Opening in write-truncate mode must succeed before copying; providers
-   // without truncate semantics are rejected to avoid trailing old bytes.
-   val descriptor=context.contentResolver.openFileDescriptor(uri,"rwt")
-    ?: return TagResult(uri,false,"Provider does not allow truncate/write")
-   descriptor.use { pfd ->
-    File(modified.absolutePath).inputStream().use { input ->
-     java.io.FileOutputStream(pfd.fileDescriptor).use { output ->
-      input.copyTo(output)
-      output.flush()
-      output.fd.sync()
+   // Validate the generated file before touching the user's original.
+   val updated=Mp3File(modified).id3v2Tag
+    ?: return TagResult(uri,false,"Generated MP3 has no ID3v2 metadata")
+   val fields=listOf(
+    changes.title to updated.title, changes.artist to updated.artist,
+    changes.album to updated.album, changes.year to updated.year,
+    changes.genre to updated.genreDescription, changes.track to updated.track,
+    changes.comment to updated.comment
+   )
+   if(fields.any { (requested,actual) -> requested!=null && requested!=actual })
+    return TagResult(uri,false,"Generated tags failed verification; original untouched")
+   if(modified.length()<=0L) return TagResult(uri,false,"Empty generated MP3")
+   // SAF writes are not universally atomic. Keep the original in a private
+   // temporary file until the replacement has been verified on the provider.
+   var replacementStarted=false
+   try {
+    replacementStarted=true
+    writeExact(uri,modified)
+    val digest=sha256(modified)
+    val readback=File.createTempFile("tag_verify_",".mp3",context.cacheDir)
+    try {
+     context.contentResolver.openInputStream(uri)?.use { stream ->
+      readback.outputStream().use { stream.copyTo(it) }
+     } ?: error("Cannot verify document after saving")
+     check(sha256(readback).contentEquals(digest)) { "Document read-back did not match" }
+    } finally { readback.delete() }
+   } catch(writeError:Exception) {
+    if(replacementStarted) {
+     try {
+      writeExact(uri,source)
+     } catch(restoreError:Exception) {
+      return TagResult(uri,false,
+       "Save failed and automatic restore failed: ${writeError.message}; ${restoreError.message}. Check original document immediately.")
      }
     }
+    return TagResult(uri,false,"Save failed; original bytes restored: ${writeError.message}")
    }
-   return TagResult(uri,true,"Embedded ID3 tags saved")
+   return TagResult(uri,true,"Original MP3 updated and byte-for-byte verified")
   } catch(e:Exception) {
    return TagResult(uri,false,e.localizedMessage ?: "Tag write failed")
   } finally {
