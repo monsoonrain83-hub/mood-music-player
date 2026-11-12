@@ -1,8 +1,10 @@
 package com.musicsquare.player.visual
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -20,26 +22,43 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Read artwork from the local audio file, without network access. */
+private object ArtworkCache {
+    private val cache = object : LruCache<String, Bitmap>(8 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
+    }
+    @Synchronized fun get(key: String): Bitmap? = cache.get(key)
+    @Synchronized fun put(key: String, value: Bitmap) { cache.put(key, value) }
+}
+
+/** Embedded artwork with bounded bitmap decoding and a small in-memory LRU cache. */
 @Composable
 fun LocalArtwork(uri: Uri?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var artwork by remember(uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(uri) {
-        artwork = null
-        if (uri != null) {
+    val key = uri?.toString()
+    var artwork by remember(key) { mutableStateOf(key?.let { ArtworkCache.get(it) }) }
+    LaunchedEffect(key) {
+        artwork = key?.let { ArtworkCache.get(it) }
+        if (uri != null && key != null && artwork == null) {
             artwork = withContext(Dispatchers.IO) {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(context, uri)
-                    retriever.embeddedPicture?.let { bytes ->
-                        val options = BitmapFactory.Options().apply { inSampleSize = 2 }
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                ArtworkCache.get(key) ?: run {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(context, uri)
+                        retriever.embeddedPicture?.let { bytes ->
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                            var sample = 1
+                            while (bounds.outWidth / sample > 512 || bounds.outHeight / sample > 512) sample *= 2
+                            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.also {
+                                ArtworkCache.put(key, it)
+                            }
+                        }
+                    } catch (_: Exception) {
+                        null
+                    } finally {
+                        try { retriever.release() } catch (_: Exception) {}
                     }
-                } catch (_: Exception) {
-                    null
-                } finally {
-                    try { retriever.release() } catch (_: Exception) {}
                 }
             }
         }
