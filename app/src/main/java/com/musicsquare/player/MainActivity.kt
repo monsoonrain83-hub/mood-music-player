@@ -432,7 +432,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     var successes=0
                                     try {
                                         songs.forEachIndexed { index,song ->
-                                            kotlinx.coroutines.currentCoroutineContext().let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
+                                            kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
                                             analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
                                             val result=analysisStore.read(song.id,song.duration)
                                                 ?: analyzer.analyze(song.uri)?.also { analysisStore.save(song.id,song.duration,it) }
