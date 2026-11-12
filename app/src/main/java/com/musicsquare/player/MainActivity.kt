@@ -92,6 +92,7 @@ private fun PlayerApp(controller: MediaController?) {
     val bg = when(skin) { "Daylight" -> Color(0xFFF7F5FC); "Ocean" -> Color(0xFF071D2B); "Rose" -> Color(0xFF251522); else -> Color(0xFF0C0C18) }
     val surface = when(skin) { "Daylight" -> Color(0xFFE5DFF1); "Ocean" -> Color(0xFF143B50); "Rose" -> Color(0xFF493044); else -> Color(0xFF20203A) }
     val accent = when(skin) { "Daylight" -> Color(0xFF7145B0); "Ocean" -> Color(0xFF69D9E9); "Rose" -> Color(0xFFFFA1C7); else -> Color(0xFFC6A4FF) }
+    val ink = if(skin=="Daylight") Color(0xFF21152F) else Color.White
     val muted = when(skin) { "Daylight" -> Color(0xFF655D76); "Ocean" -> Color(0xFFAFD0DF); "Rose" -> Color(0xFFD8B6CC); else -> Color(0xFFB5B2D3) }
 
     val store = remember { MoodStore(context) }
@@ -434,17 +435,17 @@ private fun PlayerApp(controller: MediaController?) {
                         com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=Color.White)
+                            Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=ink)
                             Text(song.artist,fontSize=12.sp,color=muted,maxLines=1)
                         }
                         IconButton(onClick={controller?.seekToPreviousMediaItem()}) {
-                            Icon(Icons.Default.SkipPrevious,"Previous track",tint=Color.White)
+                            Icon(Icons.Default.SkipPrevious,"Previous track",tint=ink)
                         }
                         IconButton(onClick={if(playing) controller?.pause() else controller?.play()}) {
-                            Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,"Play or pause",tint=Color.White)
+                            Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,"Play or pause",tint=ink)
                         }
                         IconButton(onClick={controller?.seekToNextMediaItem()}) {
-                            Icon(Icons.Default.SkipNext,"Next track",tint=Color.White)
+                            Icon(Icons.Default.SkipNext,"Next track",tint=ink)
                         }
                     }
                     val miniDuration=(controller?.duration ?: 0L).coerceAtLeast(0L)
@@ -467,7 +468,7 @@ private fun PlayerApp(controller: MediaController?) {
                 when(screen) {
                     "Home" -> {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=accent)
-                        Text("Your music, your mood",fontSize=29.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Your music, your mood",fontSize=29.sp,fontWeight=FontWeight.Bold,color=ink)
                         TextButton(onClick={screen="Settings"}) {
                             Icon(Icons.Default.Settings,contentDescription="Settings",tint=accent)
                             Text("Settings & home screen widgets")
@@ -492,13 +493,13 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         if(current!=null) {
                             Spacer(Modifier.height(16.dp))
-                            Text("Continue listening",color=Color.White,fontWeight=FontWeight.Bold)
+                            Text("Continue listening",color=ink,fontWeight=FontWeight.Bold)
                             current?.let { song ->
                                 Row(Modifier.fillMaxWidth().clickable { screen="Now" }.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
                                     com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
                                     Spacer(Modifier.width(12.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(song.title,color=Color.White,maxLines=1)
+                                        Text(song.title,color=ink,maxLines=1)
                                         Text(song.artist,color=muted,maxLines=1)
                                     }
                                     Icon(Icons.Default.ChevronRight,null,tint=accent)
@@ -506,13 +507,13 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text("Recently scanned",color=Color.White,fontWeight=FontWeight.Bold)
+                        Text("Recently scanned",color=ink,fontWeight=FontWeight.Bold)
                         songs.take(8).forEach { song ->
                             Row(Modifier.fillMaxWidth().clickable { play(songs,songs.indexOf(song)) }.padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
                                 com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(song.title,color=Color.White,maxLines=1)
+                                    Text(song.title,color=ink,maxLines=1)
                                     Text(song.artist,color=muted,fontSize=12.sp,maxLines=1)
                                 }
                                 Icon(Icons.Default.PlayArrow,null,tint=accent)
@@ -520,7 +521,7 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                     }
                     "Settings" -> {
-                        Text("Settings",fontSize=28.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Settings",fontSize=28.sp,fontWeight=FontWeight.Bold,color=ink)
                         Text("Appearance & skins",fontSize=20.sp,color=accent)
                         Text("Choose a look. Your selection is saved for next launch.",color=muted)
                         Row(horizontalArrangement=Arrangement.spacedBy(5.dp),modifier=Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
@@ -552,7 +553,7 @@ private fun PlayerApp(controller: MediaController?) {
                     }
                     "Square" -> {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
-                        Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=ink)
                         Text("Energy →   •   Happiness ↑",color=muted,fontSize=13.sp)
                          Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
                         Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
@@ -591,15 +592,15 @@ private fun PlayerApp(controller: MediaController?) {
                                         Column(Modifier.weight(1f).height(58.dp)
                                             .background(palette[(col+row)%5].copy(alpha=if(selectedCell==cell)1f else .72f),RoundedCornerShape(10.dp))
                                             .clickable { selectedCell=cell },horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-                                            Text(names[cell],fontSize=9.sp,color=Color.White,maxLines=1)
-                                            Text("$count",fontSize=14.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                                            Text(names[cell],fontSize=9.sp,color=ink,maxLines=1)
+                                            Text("$count",fontSize=14.sp,color=ink,fontWeight=FontWeight.Bold)
                                         }
                                     }
                                 }
                             }
                         }
                         Spacer(Modifier.height(20.dp))
-                        Text(if(selectedCell<0)"Select a mood cell" else names[selectedCell],fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                        Text(if(selectedCell<0)"Select a mood cell" else names[selectedCell],fontSize=22.sp,color=ink,fontWeight=FontWeight.Bold)
                         if(selectedCell>=0) {
                             val moodSongs=songs.filter { store.cell(it.id)==selectedCell }
                             Text("${moodSongs.size} tracks in this mood",color=muted,fontSize=12.sp)
@@ -609,7 +610,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(38.dp).clip(RoundedCornerShape(7.dp)))
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(song.title,color=Color.White,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                        Text(song.title,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
                                         Text(song.artist,color=muted,fontSize=12.sp,maxLines=1)
                                     }
                                     Icon(Icons.Default.PlayArrow,"Play track",tint=accent)
@@ -632,7 +633,7 @@ private fun PlayerApp(controller: MediaController?) {
                         OutlinedButton(onClick={screen="Library"},modifier=Modifier.fillMaxWidth()) { Text("Assign songs in Library") }
                     }
                     "Library" -> {
-                        Text("Your Library",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Your Library",fontSize=30.sp,fontWeight=FontWeight.Bold,color=ink)
                         Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                             listOf("All","Folder","Artist","Album","Genre","Year","Most played","Favorites","Playlists").forEach { option ->
                                 FilterChip(selected=grouping==option,onClick={grouping=option;selectedGroup="All";selectedArtistAlbum=null},label={Text(option)})
@@ -660,7 +661,7 @@ private fun PlayerApp(controller: MediaController?) {
                         }.sorted()
                         if(groupOptions.isNotEmpty() && selectedGroup!="All" && searchQuery.isBlank()) {
                             TextButton(onClick={selectedGroup="All";selectedArtistAlbum=null}) { Text("‹ Back to $grouping",color=accent) }
-                            Text(selectedGroup,fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                            Text(selectedGroup,fontSize=22.sp,color=ink,fontWeight=FontWeight.Bold)
                         }
                         if(grouping=="Artist" && selectedGroup!="All" && searchQuery.isBlank()) {
                             val artistAlbums=songs.filter { it.artist==selectedGroup }.map { it.album }.distinct().sorted()
@@ -674,7 +675,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         Icon(Icons.Default.Album,null,tint=accent)
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
-                                            Text(album,color=Color.White)
+                                            Text(album,color=ink)
                                             Text("${songs.count { it.artist==selectedGroup && it.album==album }} tracks",color=muted,fontSize=12.sp)
                                         }
                                         Icon(Icons.Default.ChevronRight,null,tint=accent)
@@ -733,7 +734,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         Icon(Icons.Default.FolderOpen,null,tint=accent)
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
-                                            Text(group.ifBlank { "Unknown" },color=Color.White,fontSize=17.sp)
+                                            Text(group.ifBlank { "Unknown" },color=ink,fontSize=17.sp)
                                             Text("${songs.count { song -> when(grouping) { "Folder"->song.folder==group; "Artist"->song.artist==group; "Album"->song.album==group; "Genre"->song.genre==group; "Year"->song.year.toString()==group; "Playlists"->extras.playlist(group).contains(song.id); else->false } }} tracks",color=muted,fontSize=12.sp)
                                         }
                                         Icon(Icons.Default.ChevronRight,null,tint=accent)
@@ -744,7 +745,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(song.title,color=Color.White,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                        Text(song.title,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
                                         Text("${song.artist} • ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
                                     }
                                     IconButton(onClick={
@@ -781,7 +782,7 @@ private fun PlayerApp(controller: MediaController?) {
                     }
                     "Now" -> {
                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-                            Text("Now Playing",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                            Text("Now Playing",fontSize=24.sp,fontWeight=FontWeight.Bold,color=ink)
                             TextButton(onClick={dancerVisible=!dancerVisible}) {
                                 Icon(Icons.Default.Person,contentDescription="Toggle dancer",tint=accent)
                                 Text(if(dancerVisible)"Hide dancer" else "Show dancer")
@@ -793,14 +794,14 @@ private fun PlayerApp(controller: MediaController?) {
                             modifier=Modifier.fillMaxWidth().height(156.dp).clip(RoundedCornerShape(20.dp))
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=Color.White,maxLines=2)
+                        Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=ink,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
                         Spacer(Modifier.height(10.dp))
                         if(lyricsVisible) {
                             Surface(color=surface,shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth().clickable { lyricsExpanded=!lyricsExpanded }) {
                                 Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     val line=lyrics?.currentLine((position+lyricsOffset).coerceAtLeast(0L))
-                                    Text(line ?: if(lyricsLoading)"Searching lyrics..." else if(lyrics?.plain!=null)"Lyrics available — tap to read" else "Lyrics not available",color=Color.White,maxLines=if(lyricsExpanded)Int.MAX_VALUE else 1,overflow=TextOverflow.Ellipsis)
+                                    Text(line ?: if(lyricsLoading)"Searching lyrics..." else if(lyrics?.plain!=null)"Lyrics available — tap to read" else "Lyrics not available",color=ink,maxLines=if(lyricsExpanded)Int.MAX_VALUE else 1,overflow=TextOverflow.Ellipsis)
                                     if(lyricsExpanded) {
                                         val content=lyrics?.plain ?: lyrics?.lines?.joinToString("\n") { it.text } ?: "No lyrics found"
                                         Text(content,color=muted,fontSize=13.sp,modifier=Modifier.heightIn(max=180.dp).verticalScroll(rememberScrollState()))
@@ -836,17 +837,17 @@ private fun PlayerApp(controller: MediaController?) {
                              Text("${duration/60000}:%02d".format((duration/1000)%60),color=muted,fontSize=12.sp)
                          }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                            IconButton(onClick={controller?.seekToPreviousMediaItem()}) { Icon(Icons.Default.SkipPrevious,"Previous",tint=Color.White) }
+                            IconButton(onClick={controller?.seekToPreviousMediaItem()}) { Icon(Icons.Default.SkipPrevious,"Previous",tint=ink) }
                             FilledIconButton(onClick={if(playing)controller?.pause() else controller?.play()},modifier=Modifier.size(68.dp)) {
                                 Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,"Play or pause")
                             }
-                            IconButton(onClick={controller?.seekToNextMediaItem()}) { Icon(Icons.Default.SkipNext,"Next",tint=Color.White) }
+                            IconButton(onClick={controller?.seekToNextMediaItem()}) { Icon(Icons.Default.SkipNext,"Next",tint=ink) }
                             IconButton(onClick={
                                 current?.let { song ->
                                     val intent=Intent(Intent.ACTION_SEND).apply { type="audio/*"; putExtra(Intent.EXTRA_STREAM,song.uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);clipData=android.content.ClipData.newUri(context.contentResolver,song.title,song.uri) }
                                     context.startActivity(Intent.createChooser(intent,"Share song"))
                                 }
-                            }) { Icon(Icons.Default.Share,"Share",tint=Color.White) }
+                            }) { Icon(Icons.Default.Share,"Share",tint=ink) }
                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
                             IconButton(onClick={shuffleOn=!shuffleOn;controller?.shuffleModeEnabled=shuffleOn}) {
@@ -927,7 +928,7 @@ private fun PlayerApp(controller: MediaController?) {
                         current?.let { song -> Text("Mood: ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",color=muted) }
                     }
                     "Tools" -> {
-                        Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
+                        Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=ink)
                         Spacer(Modifier.height(10.dp))
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             if(studioPage=="Home") {
@@ -936,7 +937,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             } else {
                                 TextButton(onClick={studioPage="Home"}) { Text("‹ Audio Studio") }
-                                Text(studioPage,fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                                Text(studioPage,fontSize=22.sp,color=ink,fontWeight=FontWeight.Bold)
                             }
                             if(studioPage=="Equalizer") {
                             Text("Equalizer",color=accent,fontWeight=FontWeight.Bold)
@@ -1023,13 +1024,13 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                     }
                     else -> {
-                        Text("Settings",fontSize=30.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                        Text("Settings",fontSize=30.sp,color=ink,fontWeight=FontWeight.Bold)
                         Spacer(Modifier.height(20.dp))
                         Text("Offline-first • Local playback",color=muted)
                         Text("Favorites: ${songs.count { favorites.getBoolean(it.id.toString(),false) } + (favoritesVersion * 0)}",color=muted)
                         Text("No account or internet required.",color=muted)
                         Spacer(Modifier.height(12.dp))
-                        Text("MusicSquare Player 0.3.0",color=Color.White)
+                        Text("MusicSquare Player 0.3.0",color=ink)
                         Text("Offline backup of playlists, favorites, moods and queue",color=muted)
                         Row {
                             TextButton(onClick={backupSaver.launch("musicsquare-backup.json")}) { Text("Export backup") }
