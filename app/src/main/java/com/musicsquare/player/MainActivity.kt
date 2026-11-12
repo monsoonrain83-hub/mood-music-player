@@ -25,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -103,7 +104,7 @@ private fun PlayerApp(controller: MediaController?) {
     var lyricsLoading by remember { mutableStateOf(false) }
     var lyricsExpanded by remember { mutableStateOf(false) }
     var lyricsVisible by remember { mutableStateOf(true) }
-    var dancerVisible by remember { mutableStateOf(false) }
+    var dancerVisible by remember { mutableStateOf(true) }
     var manualLyrics by remember { mutableStateOf("") }
     var lyricsMessage by remember { mutableStateOf<String?>(null) }
     var lyricsOffset by remember { mutableLongStateOf(0L) }
@@ -398,7 +399,7 @@ private fun PlayerApp(controller: MediaController?) {
             Column {
                 current?.let { song ->
                     Row(Modifier.fillMaxWidth().background(surface).clickable { screen="Now" }.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Icon(Icons.Default.MusicNote,null,tint=accent)
+                        com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=Color.White)
@@ -593,9 +594,10 @@ private fun PlayerApp(controller: MediaController?) {
                     "Now" -> {
                         Text("Now Playing",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White)
                         Spacer(Modifier.height(8.dp))
-                        Box(Modifier.fillMaxWidth().heightIn(max=156.dp).height(156.dp).background(Color(0xFF55418B),RoundedCornerShape(20.dp)),contentAlignment=Alignment.Center) {
-                            Icon(Icons.Default.MusicNote,"Album art placeholder",tint=Color.White,modifier=Modifier.size(68.dp))
-                        }
+                        com.musicsquare.player.visual.LocalArtwork(
+                            uri=current?.uri,
+                            modifier=Modifier.fillMaxWidth().height(156.dp).clip(RoundedCornerShape(20.dp))
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=Color.White,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
