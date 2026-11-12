@@ -4,9 +4,9 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Portable app preferences. Does not copy audio or licensed lyrics. */
+/** Portable app preferences. Does not copy audio. Cached or user-supplied lyrics are exported only by the user. */
 class LibraryBackup(private val context:Context) {
- private val names=listOf("library_extras","mood_assignments","favorites","analysis_cache","equalizer","playback_queue")
+ private val names=listOf("library_extras","mood_assignments","favorites","analysis_cache","equalizer","playback_queue","lyrics_cache")
  fun export():String {
   val root=JSONObject().put("schema",1)
   val entries=JSONObject()
