@@ -40,6 +40,7 @@ import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
 import com.musicsquare.player.data.AnalysisStore
+import com.musicsquare.player.data.LibraryBackup
 import com.musicsquare.player.data.PlaybackQueueStore
 import com.musicsquare.player.data.LibraryExtras
 import com.musicsquare.player.visual.DancingCompanion
@@ -89,6 +90,9 @@ private fun PlayerApp(controller: MediaController?) {
     val analyzer = remember { OfflineAudioAnalyzer(context) }
     val extras = remember { LibraryExtras(context) }
     val queueStore=remember { PlaybackQueueStore(context) }
+    val backup=remember { LibraryBackup(context) }
+    var backupStatus by remember { mutableStateOf<String?>(null) }
+    var playlistRename by remember { mutableStateOf("") }
     var restoredQueue by remember { mutableStateOf(false) }
     val tagEditor = remember { TagEditor(context) }
     val wavEditor = remember { WavEditor(context) }
@@ -264,6 +268,26 @@ private fun PlayerApp(controller: MediaController?) {
             lyricsMessage="Lyrics saved as a separate file"
         }
     }
+    val backupSaver=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if(uri!=null)scope.launch {
+            backupStatus=runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri,"wt")!!.bufferedWriter().use { it.write(backup.export()) }
+                }
+                "Backup saved"
+            }.getOrElse { it.message ?: "Backup failed" }
+        }
+    }
+    val backupPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if(uri!=null)scope.launch {
+            backupStatus=runCatching {
+                val raw=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                }
+                "Restored ${backup.import(raw)} settings; restart to refresh all views"
+            }.getOrElse { it.message ?: "Restore failed" }
+        }
+    }
     val tagPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         selectedTagUris = uris.filter { it.toString().isNotBlank() }
         tagStatus = if(selectedTagUris.isEmpty()) "No files selected" else "${selectedTagUris.size} files selected. Blank fields remain unchanged."
@@ -429,6 +453,13 @@ private fun PlayerApp(controller: MediaController?) {
                         if(grouping=="Playlists") {
                             OutlinedTextField(value=playlistName,onValueChange={playlistName=it},label={Text("New playlist name")},singleLine=true)
                             Button(onClick={extras.createPlaylist(playlistName);playlistVersion++;playlistName=""}) { Text("Create playlist") }
+                            if(selectedGroup!="All") {
+                                OutlinedTextField(value=playlistRename,onValueChange={playlistRename=it},label={Text("Rename selected playlist")})
+                                Row {
+                                    TextButton(onClick={extras.renamePlaylist(selectedGroup,playlistRename);selectedGroup="All";playlistVersion++}) { Text("Rename") }
+                                    TextButton(onClick={extras.deletePlaylist(selectedGroup);selectedGroup="All";playlistVersion++}) { Text("Delete playlist") }
+                                }
+                            }
                         }
                         val groupOptions=when(grouping) {
                             "Folder" -> songs.map { it.folder }.distinct()
@@ -657,6 +688,12 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("No account or internet required.",color=muted)
                         Spacer(Modifier.height(12.dp))
                         Text("MusicSquare Player 0.3.0",color=Color.White)
+                        Text("Offline backup of playlists, favorites, moods and queue",color=muted)
+                        Row {
+                            TextButton(onClick={backupSaver.launch("musicsquare-backup.json")}) { Text("Export backup") }
+                            TextButton(onClick={backupPicker.launch(arrayOf("application/json","text/*"))}) { Text("Restore backup") }
+                        }
+                        backupStatus?.let { Text(it,color=muted) }
                         Spacer(Modifier.height(16.dp))
 
                     }
