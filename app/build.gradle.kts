@@ -2,10 +2,11 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace = "com.musicsquare.player"
  compileSdk = 35
- defaultConfig { applicationId = "com.musicsquare.player"; minSdk = 24; targetSdk = 34; versionCode = 2; versionName = "0.2.0" }
+ defaultConfig { applicationId = "com.musicsquare.player"; minSdk = 24; targetSdk = 34; versionCode = 3; versionName = "0.3.0" }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
  kotlinOptions { jvmTarget = "17" }
  buildFeatures { compose = true }
+ defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
 }
 dependencies {
  implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -22,4 +23,8 @@ dependencies {
  implementation("com.mpatric:mp3agic:0.9.1")
  implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.9")
  testImplementation("junit:junit:4.13.2")
+ androidTestImplementation("androidx.test.ext:junit:1.2.1")
+ androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+ androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+ debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
