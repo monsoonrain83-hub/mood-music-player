@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.consume
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -151,6 +152,9 @@ private fun PlayerApp(controller: MediaController?) {
     var error by remember { mutableStateOf<String?>(null) }
     var screen by remember { mutableStateOf("Square") }
     var selectedCell by remember { mutableIntStateOf(-1) }
+    var moodValence by remember { mutableFloatStateOf(0.5f) }
+    var moodEnergy by remember { mutableFloatStateOf(0.5f) }
+    var queueExpanded by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf<LocalSong?>(null) }
     var playing by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
@@ -752,7 +756,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Modifier
                             .offset { androidx.compose.ui.unit.IntOffset(dancerX.toInt(),dancerY.toInt()) }
                             .pointerInput(maxX,maxY) {
-                                androidx.compose.foundation.gestures.detectDragGestures { change,drag ->
+                                detectDragGestures { change,drag ->
                                     change.consume()
                                     dancerX=(dancerX+drag.x).coerceIn(0f,maxX)
                                     dancerY=(dancerY+drag.y).coerceIn(0f,maxY)
