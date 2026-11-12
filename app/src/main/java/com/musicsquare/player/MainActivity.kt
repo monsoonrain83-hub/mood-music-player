@@ -425,6 +425,32 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=Color.White)
                         Text("Energy →   •   Happiness ↑",color=muted,fontSize=13.sp)
                          Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
+                        Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
+                            onClick={
+                                scope.launch {
+                                    analysisProgress="Starting offline analysis"
+                                    var successes=0
+                                    try {
+                                        songs.forEachIndexed { index,song ->
+                                            kotlinx.coroutines.currentCoroutineContext().let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
+                                            analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
+                                            val result=analysisStore.read(song.id,song.duration)
+                                                ?: analyzer.analyze(song.uri)?.also { analysisStore.save(song.id,song.duration,it) }
+                                            if(result!=null) {
+                                                if(store.cell(song.id)==null) {
+                                                    // Energy-based provisional placement. Valence is unknown, not inferred.
+                                                    store.assign(song.id,MoodCoordinates.cell(0.5f,result.energy.coerceIn(0f,1f)))
+                                                    assignmentsVersion++
+                                                }
+                                                successes++
+                                            }
+                                        }
+                                        analyzed=successes
+                                    } finally { analysisProgress=null }
+                                }
+                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze and populate mood grid") }
+                        analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
+                        Text("Automatic cells use measured energy with neutral (unknown) happiness; not an AI valence prediction.",color=muted,fontSize=11.sp)
                         Spacer(Modifier.height(20.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             repeat(5) { row ->
