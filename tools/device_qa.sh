@@ -33,4 +33,5 @@ fi
 if grep -E 'FATAL EXCEPTION|ANR in com\.musicsquare\.player' "$OUT/logcat.txt" | grep -q "$PACKAGE"; then
  echo "FAIL: app crash/ANR in logcat. Reports: $OUT"; exit 1
 fi
+python3 tools/summarize_device_qa.py "$OUT"
 echo "Soak completed without detected disappearance. Compare battery, thermal and memory reports: $OUT"
