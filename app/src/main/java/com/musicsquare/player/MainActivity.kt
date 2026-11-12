@@ -601,6 +601,24 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }
                         if(sleepRemaining>0)Text("Stopping in ${sleepRemaining/60}m ${sleepRemaining%60}s",color=muted,fontSize=12.sp)
+                        TextButton(onClick={queueExpanded=!queueExpanded}) { Text(if(queueExpanded)"Hide play queue" else "Show play queue") }
+                        if(queueExpanded && controller!=null) {
+                            Text("${controller.mediaItemCount} tracks in queue",color=muted,fontSize=12.sp)
+                            Column(Modifier.heightIn(max=280.dp).verticalScroll(rememberScrollState())) {
+                                repeat(controller.mediaItemCount) { index ->
+                                    val item=controller.getMediaItemAt(index)
+                                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                                        TextButton(modifier=Modifier.weight(1f),onClick={controller.seekToDefaultPosition(index);controller.play()}) {
+                                            Text("${index+1}. ${item.mediaMetadata.title ?: item.mediaId}",maxLines=1,overflow=TextOverflow.Ellipsis)
+                                        }
+                                        IconButton(onClick={
+                                            if(index>0)controller.moveMediaItem(index,index-1)
+                                        },enabled=index>0) { Icon(Icons.Default.KeyboardArrowUp,"Move up",tint=accent) }
+                                        IconButton(onClick={controller.removeMediaItem(index)}) { Icon(Icons.Default.Close,"Remove from queue",tint=accent) }
+                                    }
+                                }
+                            }
+                        }
                         Text("Playback speed: ${"%.2f".format(java.util.Locale.US,playbackSpeed)}×",color=muted)
                         Slider(value=playbackSpeed,onValueChange={playbackSpeed=it;controller?.setPlaybackSpeed(it)},valueRange=0.5f..2f)
                         if(lyricsExpanded) {
