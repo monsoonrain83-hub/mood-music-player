@@ -131,6 +131,7 @@ private fun PlayerApp(controller: MediaController?) {
     var preset by remember { mutableStateOf(eqPrefs.getString("preset","Flat") ?: "Flat") }
     var bass by remember { mutableFloatStateOf(eqPrefs.getInt("bass",0).toFloat()) }
     var grouping by remember { mutableStateOf("All") }
+    var studioPage by remember { mutableStateOf("Home") }
     var lyricsSearchVersion by remember { mutableIntStateOf(0) }
     var selectedGroup by remember { mutableStateOf("All") }
     var playlistName by remember { mutableStateOf("") }
@@ -659,6 +660,15 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=Color.White)
                         Spacer(Modifier.height(10.dp))
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            if(studioPage=="Home") {
+                                listOf("Equalizer","Tag Editor","Converter","Cutter").forEach { item ->
+                                    OutlinedButton(onClick={studioPage=item},modifier=Modifier.fillMaxWidth()) { Text(item+"  ›") }
+                                }
+                            } else {
+                                TextButton(onClick={studioPage="Home"}) { Text("‹ Audio Studio") }
+                                Text(studioPage,fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                            }
+                            if(studioPage=="Equalizer") {
                             Text("Equalizer",color=accent,fontWeight=FontWeight.Bold)
                             Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 listOf("Flat","Bass Boost","Treble Boost","Vocal","Rock","Jazz","Classical","Dance").forEach { option ->
@@ -668,6 +678,8 @@ private fun PlayerApp(controller: MediaController?) {
                             Text("Bass boost: ${bass.toInt()}%",color=muted)
                             Slider(value=bass,onValueChange={bass=it;eqPrefs.edit().putInt("bass",it.toInt()).apply()},valueRange=0f..100f)
                             HorizontalDivider()
+                            }
+                            if(studioPage=="Tag Editor") {
                             Text("Batch tag editor • MP3, FLAC, WAV, OGG, M4A",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
                             Text("${selectedTagUris.size} selected",color=muted)
@@ -694,6 +706,8 @@ private fun PlayerApp(controller: MediaController?) {
                             }) { Text(if(tagBusy)"Writing..." else "Apply tags to selected files") }
                             tagStatus?.let { Text(it,color=muted) }
                             HorizontalDivider()
+                            }
+                            if(studioPage=="Converter") {
                             Text("Audio converter",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={converterPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source audio") }
                             Text(converterSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
@@ -709,6 +723,8 @@ private fun PlayerApp(controller: MediaController?) {
                             }) { Text(if(converterBusy)"Converting..." else "Convert and save") }
                             converterStatus?.let { Text(it,color=muted) }
                             HorizontalDivider()
+                            }
+                            if(studioPage=="Cutter") {
                             Text("Audio cutter / silence / speed",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={wavPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source to edit") }
                             Text(wavSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
@@ -733,6 +749,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 Text(if(wavBusy)"Processing..." else "Process and save")
                             }
                             wavStatus?.let { Text(it,color=muted) }
+                            }
                         }
                     }
                     else -> {
