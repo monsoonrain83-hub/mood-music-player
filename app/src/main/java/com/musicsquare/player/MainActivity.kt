@@ -412,10 +412,22 @@ private fun PlayerApp(controller: MediaController?) {
                             Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=Color.White)
                             Text(song.artist,fontSize=12.sp,color=muted,maxLines=1)
                         }
+                        IconButton(onClick={controller?.seekToPreviousMediaItem()}) {
+                            Icon(Icons.Default.SkipPrevious,"Previous track",tint=Color.White)
+                        }
                         IconButton(onClick={if(playing) controller?.pause() else controller?.play()}) {
                             Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,"Play or pause",tint=Color.White)
                         }
+                        IconButton(onClick={controller?.seekToNextMediaItem()}) {
+                            Icon(Icons.Default.SkipNext,"Next track",tint=Color.White)
+                        }
                     }
+                    val miniDuration=(controller?.duration ?: 0L).coerceAtLeast(0L)
+                    LinearProgressIndicator(
+                        progress={if(miniDuration>0) (position.toFloat()/miniDuration).coerceIn(0f,1f) else 0f},
+                        modifier=Modifier.fillMaxWidth().height(2.dp),
+                        color=accent,trackColor=surface
+                    )
                 }
                 NavigationBar(containerColor=Color(0xFF171728)) {
                     listOf(Triple("Square",Icons.Default.GridView,"Square"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Now",Icons.Default.PlayCircle,"Player"),Triple("Tools",Icons.Default.Tune,"Tools")).forEach { (key,icon,title) ->
