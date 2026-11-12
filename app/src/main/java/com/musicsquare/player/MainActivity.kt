@@ -57,6 +57,15 @@ import com.musicsquare.player.data.scanLocalMusic
 import com.musicsquare.player.playback.MusicPlaybackService
 import kotlinx.coroutines.launch
 
+private fun normalizeLibraryText(text: String): String =
+    java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC)
+        .replace('ي','ی').replace('ك','ک')
+        .replace("\\u0640","")
+        .lowercase(java.util.Locale.ROOT).trim()
+
+private fun libraryLetter(text: String): String =
+    normalizeLibraryText(text).firstOrNull()?.uppercaseChar()?.toString() ?: "#"
+
 private val bg = Color(0xFF0C0C18)
 private val surface = Color(0xFF20203A)
 private val accent = Color(0xFFC6A4FF)
@@ -658,7 +667,7 @@ private fun PlayerApp(controller: MediaController?) {
                             "Year" -> songs.map { it.year.toString() }.distinct()
                             "Playlists" -> extras.playlistNames().also { playlistVersion }
                             else -> emptyList()
-                        }.sorted()
+                        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { normalizeLibraryText(it) })
                         if(groupOptions.isNotEmpty() && selectedGroup!="All" && searchQuery.isBlank()) {
                             TextButton(onClick={selectedGroup="All";selectedArtistAlbum=null}) { Text("‹ Back to $grouping",color=accent) }
                             Text(selectedGroup,fontSize=22.sp,color=ink,fontWeight=FontWeight.Bold)
@@ -707,7 +716,7 @@ private fun PlayerApp(controller: MediaController?) {
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
-                            (searchQuery.isBlank() || song.title.contains(searchQuery.trim(),true) || song.artist.contains(searchQuery.trim(),true) || song.album.contains(searchQuery.trim(),true) || song.folder.contains(searchQuery.trim(),true) || song.genre.contains(searchQuery.trim(),true)) && (searchQuery.isNotBlank() || when(grouping) {
+                            (searchQuery.isBlank() || listOf(song.title,song.artist,song.album,song.folder,song.genre).any { normalizeLibraryText(it).contains(normalizeLibraryText(searchQuery)) }) && (searchQuery.isNotBlank() || when(grouping) {
                                 "Folder" -> selectedGroup=="All" || song.folder==selectedGroup
                                 "Artist" -> (selectedGroup=="All" || song.artist==selectedGroup) && (selectedArtistAlbum==null || song.album==selectedArtistAlbum)
                                 "Album" -> selectedGroup=="All" || song.album==selectedGroup
@@ -717,14 +726,14 @@ private fun PlayerApp(controller: MediaController?) {
                                 "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
                                 else -> true
                             })
-                        }.let { list -> if(grouping=="Most played" && searchQuery.isBlank())list.sortedByDescending { extras.plays(it.id) } else list }
+                        }.let { list -> if(grouping=="Most played" && searchQuery.isBlank()) list.sortedByDescending { extras.plays(it.id) } else list.sortedWith(compareBy { normalizeLibraryText(it.title) }) }
                         if(searchQuery.isNotBlank()) {
                             Text("${filtered.size} matching songs",color=accent,fontSize=12.sp)
                             if(filtered.isEmpty()) Text("No matching audio found. Try a different title or artist.",color=muted,fontSize=12.sp)
                         }
                         val azGroups = groupOptions.isNotEmpty() && selectedGroup=="All" && searchQuery.isBlank()
                         val azSource = if(azGroups) groupOptions else filtered.map { it.title }
-                        val azLetters = azSource.mapNotNull { it.trim().firstOrNull()?.uppercaseChar()?.toString() }.distinct().sorted()
+                        val azLetters = azSource.map(::libraryLetter).distinct().sorted()
                         val azState = androidx.compose.foundation.lazy.rememberLazyListState()
                         Row(Modifier.fillMaxWidth()) {
                         LazyColumn(state=azState,modifier=Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -770,7 +779,7 @@ private fun PlayerApp(controller: MediaController?) {
                             Column(Modifier.width(30.dp).verticalScroll(rememberScrollState()),horizontalAlignment=Alignment.CenterHorizontally) {
                                 azLetters.forEach { letter ->
                                     TextButton(onClick={
-                                        val position=azSource.indexOfFirst { it.trim().startsWith(letter,ignoreCase=true) }
+                                        val position=azSource.indexOfFirst { libraryLetter(it)==letter }
                                         if(position>=0) scope.launch { azState.scrollToItem(position) }
                                     },contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp)) {
                                         Text(letter,color=accent,fontSize=11.sp)
