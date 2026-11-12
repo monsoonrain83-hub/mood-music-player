@@ -435,7 +435,15 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         Spacer(Modifier.height(20.dp))
                         Text(if(selectedCell<0)"Select a mood cell" else names[selectedCell],fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
-                        Text("Energy and BPM are estimated offline. Mood valence needs manual labeling.",color=muted,fontSize=12.sp)
+                        Text("Energy and BPM are estimated offline; valence is user-labeled, not guessed.",color=muted,fontSize=12.sp)
+                        Text("Manual mood mapping: happiness ${(moodValence*100).toInt()}% / energy ${(moodEnergy*100).toInt()}%",color=muted,fontSize=12.sp)
+                        Text("Happiness (valence)",color=muted,fontSize=12.sp)
+                        Slider(value=moodValence,onValueChange={moodValence=it})
+                        Text("Energy",color=muted,fontSize=12.sp)
+                        Slider(value=moodEnergy,onValueChange={moodEnergy=it})
+                        val mappedRow=(4-(moodValence*5).toInt().coerceIn(0,4))
+                        val mappedCol=(moodEnergy*5).toInt().coerceIn(0,4)
+                        TextButton(onClick={selectedCell=mappedRow*5+mappedCol}) { Text("Select cell from mood coordinates") }
                         Spacer(Modifier.height(12.dp))
                         Button(enabled=selectedCell>=0 && songs.any { store.cell(it.id)==selectedCell } && controller!=null,
                             onClick={play(songs.filter { store.cell(it.id)==selectedCell })},modifier=Modifier.fillMaxWidth()) {
