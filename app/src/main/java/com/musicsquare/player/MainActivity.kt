@@ -131,6 +131,7 @@ private fun PlayerApp(controller: MediaController?) {
     var preset by remember { mutableStateOf(eqPrefs.getString("preset","Flat") ?: "Flat") }
     var bass by remember { mutableFloatStateOf(eqPrefs.getInt("bass",0).toFloat()) }
     var grouping by remember { mutableStateOf("All") }
+    var lyricsSearchVersion by remember { mutableIntStateOf(0) }
     var selectedGroup by remember { mutableStateOf("All") }
     var playlistName by remember { mutableStateOf("") }
     var selectedPlaylist by remember { mutableStateOf<String?>(null) }
@@ -365,7 +366,7 @@ private fun PlayerApp(controller: MediaController?) {
             sleepMinutes=0
         } else sleepRemaining=0
     }
-    LaunchedEffect(current?.id) {
+    LaunchedEffect(current?.id,lyricsSearchVersion) {
         val song=current
         lyrics=null
         lyricsOffset=if(song!=null)lyricsRepository.offsetMs(song.title,song.artist,song.duration) else 0L
@@ -420,6 +421,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=Color.White)
                         Text("Energy →   •   Happiness ↑",color=muted,fontSize=13.sp)
+                         Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
                         Spacer(Modifier.height(20.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             repeat(5) { row ->
@@ -480,10 +482,9 @@ private fun PlayerApp(controller: MediaController?) {
                             "Playlists" -> extras.playlistNames().also { playlistVersion }
                             else -> emptyList()
                         }.sorted()
-                        if(groupOptions.isNotEmpty()) {
-                            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                (listOf("All")+groupOptions).forEach { group -> FilterChip(selected=selectedGroup==group,onClick={selectedGroup=group},label={Text(group)}) }
-                            }
+                        if(groupOptions.isNotEmpty() && selectedGroup!="All") {
+                            TextButton(onClick={selectedGroup="All"}) { Text("‹ Back to $grouping",color=accent) }
+                            Text(selectedGroup,fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
                         }
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("${songs.size} local songs",color=muted,modifier=Modifier.weight(1f))
@@ -521,7 +522,19 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }.let { list -> if(grouping=="Most played")list.sortedByDescending { extras.plays(it.id) } else list }
                         LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            items(filtered,key={it.id}) { song ->
+                            if(groupOptions.isNotEmpty() && selectedGroup=="All") {
+                                items(groupOptions) { group ->
+                                    Row(Modifier.fillMaxWidth().clickable { selectedGroup=group }.padding(vertical=14.dp),verticalAlignment=Alignment.CenterVertically) {
+                                        Icon(Icons.Default.FolderOpen,null,tint=accent)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(group.ifBlank { "Unknown" },color=Color.White,fontSize=17.sp)
+                                            Text("${songs.count { song -> when(grouping) { "Folder"->song.folder==group; "Artist"->song.artist==group; "Album"->song.album==group; "Genre"->song.genre==group; "Year"->song.year.toString()==group; "Playlists"->extras.playlist(group).contains(song.id); else->false } }} tracks",color=muted,fontSize=12.sp)
+                                        }
+                                        Icon(Icons.Default.ChevronRight,null,tint=accent)
+                                    }
+                                }
+                            } else items(filtered,key={it.id}) { song ->
                                 Row(Modifier.fillMaxWidth().clickable { play(filtered,filtered.indexOf(song)) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                                     Icon(Icons.Default.MusicNote,null,tint=accent,modifier=Modifier.size(36.dp))
                                     Spacer(Modifier.width(10.dp))
@@ -579,6 +592,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
                             TextButton(onClick={lyricsVisible=!lyricsVisible}) { Text(if(lyricsVisible)"Hide lyrics" else "Show lyrics") }
                             TextButton(onClick={lrcPicker.launch(arrayOf("text/*","application/octet-stream"))}) { Text("Import LRC") }
+                             TextButton(onClick={lyricsSearchVersion++}) { Text("Search lyrics online") }
                             TextButton(onClick={lrcSaver.launch("${current?.title ?: "lyrics"}.lrc")}) { Text("Save lyrics") }
                             TextButton(onClick={dancerVisible=!dancerVisible}) { Text(if(dancerVisible)"Hide dancer" else "Dance") }
                         }
@@ -586,7 +600,11 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(8.dp))
                         val duration=(controller?.duration ?: 0L).coerceAtLeast(0L)
                         Slider(value=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f,
-                            onValueChange={controller?.seekTo((it*duration).toLong())},enabled=duration>0)
+                            onValueChange={fraction -> controller?.seekTo((fraction*duration).toLong());position=(fraction*duration).toLong()},enabled=duration>0)
+                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                             Text("${position/60000}:%02d".format((position/1000)%60),color=muted,fontSize=12.sp)
+                             Text("${duration/60000}:%02d".format((duration/1000)%60),color=muted,fontSize=12.sp)
+                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
                             IconButton(onClick={controller?.seekToPreviousMediaItem()}) { Icon(Icons.Default.SkipPrevious,"Previous",tint=Color.White) }
                             FilledIconButton(onClick={if(playing)controller?.pause() else controller?.play()},modifier=Modifier.size(68.dp)) {
