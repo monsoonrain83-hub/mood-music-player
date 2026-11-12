@@ -13,5 +13,8 @@
   <service android:name=".playback.MusicPlaybackService" android:exported="true" android:foregroundServiceType="mediaPlayback">
    <intent-filter><action android:name="androidx.media3.session.MediaSessionService"/></intent-filter>
   </service>
+  <receiver android:name=".widgets.Widget1x4" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_music_1x4"/></receiver>
+  <receiver android:name=".widgets.Widget2x4" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_music_2x4"/></receiver>
+  <receiver android:name=".widgets.Widget4x4" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_music_4x4"/></receiver>
  </application>
 </manifest>
