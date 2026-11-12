@@ -430,7 +430,7 @@ private fun PlayerApp(controller: MediaController?) {
                     )
                 }
                 NavigationBar(containerColor=Color(0xFF171728)) {
-                    listOf(Triple("Home",Icons.Default.Home,"Home"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Square",Icons.Default.GridView,"Mood"),Triple("Tools",Icons.Default.Tune,"Studio")).forEach { (key,icon,title) ->
+                    listOf(Triple("Home",Icons.Default.Home,"Home"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Now",Icons.Default.PlayCircle,"Player"),Triple("Square",Icons.Default.GridView,"Mood"),Triple("Tools",Icons.Default.Tune,"Studio")).forEach { (key,icon,title) ->
                         NavigationBarItem(selected=screen==key,onClick={screen=key},icon={Icon(icon,title)},label={Text(title)})
                     }
                 }
