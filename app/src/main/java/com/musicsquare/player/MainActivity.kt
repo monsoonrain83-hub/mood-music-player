@@ -458,9 +458,13 @@ private fun PlayerApp(controller: MediaController?) {
                         color=accent,trackColor=surface
                     )
                 }
-                NavigationBar(containerColor=Color(0xFF171728)) {
+                NavigationBar(containerColor=surface) {
                     listOf(Triple("Home",Icons.Default.Home,"Home"),Triple("Library",Icons.Default.LibraryMusic,"Library"),Triple("Now",Icons.Default.PlayCircle,"Player"),Triple("Square",Icons.Default.GridView,"Mood"),Triple("Tools",Icons.Default.Tune,"Studio")).forEach { (key,icon,title) ->
-                        NavigationBarItem(selected=screen==key,onClick={screen=key},icon={Icon(icon,title)},label={Text(title)})
+                        val tabColor=if(screen==key) ink else muted
+                        NavigationBarItem(selected=screen==key,onClick={screen=key},
+                            icon={Icon(icon,contentDescription=title,tint=tabColor)},
+                            label={Text(title,color=tabColor)},
+                            colors=NavigationBarItemDefaults.colors(indicatorColor=accent.copy(alpha=0.20f)))
                     }
                 }
             }
