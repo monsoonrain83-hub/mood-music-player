@@ -11,6 +11,7 @@ import com.musicsquare.player.MainActivity
 import com.musicsquare.player.audio.EqualizerManager
 import android.content.SharedPreferences
 import androidx.media3.common.Player
+import com.musicsquare.player.widgets.MusicWidgetProvider
 
 class MusicPlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
@@ -32,6 +33,8 @@ class MusicPlaybackService : MediaSessionService() {
         }
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) { updateEffects() }
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { syncWidgets(player) }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { syncWidgets(player) }
         })
         preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> updateEffects() }
         prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
@@ -39,6 +42,12 @@ class MusicPlaybackService : MediaSessionService() {
         val intent = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         session = MediaSession.Builder(this, player).setSessionActivity(pending).build()
+    }
+    private fun syncWidgets(player: Player) {
+        val title = player.currentMediaItem?.mediaMetadata?.title?.toString()
+        getSharedPreferences("widget_state", MODE_PRIVATE).edit()
+            .putString("title", title).putBoolean("playing", player.isPlaying).apply()
+        MusicWidgetProvider.refreshAll(this, title, player.isPlaying)
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
     override fun onDestroy() {
