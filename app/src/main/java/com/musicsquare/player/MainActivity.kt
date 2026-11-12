@@ -164,6 +164,7 @@ private fun PlayerApp(controller: MediaController?) {
     var sleepRemaining by remember { mutableLongStateOf(0L) }
     var shuffleOn by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
+    var repeatFolder by remember { mutableStateOf(false) }
     var assignSong by remember { mutableStateOf<LocalSong?>(null) }
     var assignmentsVersion by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
@@ -387,6 +388,7 @@ private fun PlayerApp(controller: MediaController?) {
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).build()).build()
         }
         controller?.apply { setMediaItems(items, index.coerceIn(0,items.lastIndex), 0); prepare(); play() }
+        repeatFolder=false
         current = list[index.coerceIn(0,list.lastIndex)]
         extras.played(current!!.id)
         screen = "Now"
@@ -625,8 +627,46 @@ private fun PlayerApp(controller: MediaController?) {
                             }) { Icon(Icons.Default.Share,"Share",tint=Color.White) }
                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                            TextButton(onClick={shuffleOn=!shuffleOn;controller?.shuffleModeEnabled=shuffleOn}) { Text(if(shuffleOn)"Shuffle On" else "Shuffle Off") }
-                            TextButton(onClick={repeatMode=when(repeatMode) { Player.REPEAT_MODE_OFF->Player.REPEAT_MODE_ALL;Player.REPEAT_MODE_ALL->Player.REPEAT_MODE_ONE;else->Player.REPEAT_MODE_OFF };controller?.repeatMode=repeatMode}) { Text(when(repeatMode){Player.REPEAT_MODE_ONE->"Repeat One";Player.REPEAT_MODE_ALL->"Repeat All";else->"Repeat Off"}) }
+                            IconButton(onClick={shuffleOn=!shuffleOn;controller?.shuffleModeEnabled=shuffleOn}) {
+                                Icon(Icons.Default.Shuffle,contentDescription="Shuffle",tint=if(shuffleOn)accent else muted)
+                            }
+                            TextButton(onClick={
+                                repeatFolder=false
+                                repeatMode=when(repeatMode) {
+                                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                                    else -> Player.REPEAT_MODE_OFF
+                                }
+                                controller?.repeatMode=repeatMode
+                            }) {
+                                Icon(Icons.Default.Repeat,contentDescription="Repeat mode",tint=if(repeatMode==Player.REPEAT_MODE_OFF)muted else accent)
+                                Text(when(repeatMode) { Player.REPEAT_MODE_ONE -> "1"; Player.REPEAT_MODE_ALL -> "All"; else -> "Off" },fontSize=11.sp)
+                            }
+                            TextButton(enabled=current!=null,onClick={
+                                val song=current
+                                if(song!=null) {
+                                    val folderSongs=songs.filter { it.folder==song.folder }
+                                    if(folderSongs.isNotEmpty()) {
+                                        repeatFolder=true
+                                        repeatMode=Player.REPEAT_MODE_ALL
+                                        val index=folderSongs.indexOfFirst { it.id==song.id }.coerceAtLeast(0)
+                                        val items=folderSongs.map {
+                                            MediaItem.Builder().setUri(it.uri).setMediaId(it.id.toString())
+                                                .setMediaMetadata(MediaMetadata.Builder().setTitle(it.title).setArtist(it.artist).build()).build()
+                                        }
+                                        controller?.apply {
+                                            setMediaItems(items,index,position)
+                                            this.repeatMode=Player.REPEAT_MODE_ALL
+                                            shuffleModeEnabled=shuffleOn
+                                            prepare()
+                                            if(playing)play()
+                                        }
+                                    }
+                                }
+                            }) {
+                                Icon(Icons.Default.Folder,contentDescription="Repeat folder",tint=if(repeatFolder)accent else muted)
+                                Text("Folder",fontSize=11.sp,color=if(repeatFolder)accent else muted)
+                            }
                         }
                         Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
                             Text("Sleep timer",color=muted)
