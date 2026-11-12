@@ -455,7 +455,7 @@ private fun PlayerApp(controller: MediaController?) {
             }
         }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
-            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings" || screen=="Now" || screen=="Home") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Column(Modifier.fillMaxSize().padding(horizontal=18.dp).then(if(screen=="Settings" || screen=="Now" || screen=="Home" || screen=="Square") Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 Spacer(Modifier.height(18.dp))
                 when(screen) {
                     "Home" -> {
@@ -572,7 +572,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     repeat(5) { col ->
                                         val cell=row*5+col
                                         val count=songs.count { store.cell(it.id)==cell } + (assignmentsVersion * 0)
-                                        Column(Modifier.weight(1f).aspectRatio(0.82f)
+                                        Column(Modifier.weight(1f).height(58.dp)
                                             .background(palette[(col+row)%5].copy(alpha=if(selectedCell==cell)1f else .72f),RoundedCornerShape(10.dp))
                                             .clickable { selectedCell=cell },horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
                                             Text(names[cell],fontSize=9.sp,color=Color.White,maxLines=1)
@@ -584,6 +584,23 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         Spacer(Modifier.height(20.dp))
                         Text(if(selectedCell<0)"Select a mood cell" else names[selectedCell],fontSize=22.sp,color=Color.White,fontWeight=FontWeight.Bold)
+                        if(selectedCell>=0) {
+                            val moodSongs=songs.filter { store.cell(it.id)==selectedCell }
+                            Text("${moodSongs.size} tracks in this mood",color=muted,fontSize=12.sp)
+                            if(moodSongs.isEmpty()) Text("No tracks assigned yet. Choose another mood or assign songs from Library.",color=muted,fontSize=12.sp)
+                            moodSongs.take(40).forEachIndexed { index,song ->
+                                Row(Modifier.fillMaxWidth().clickable { play(moodSongs,index) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+                                    com.musicsquare.player.visual.LocalArtwork(song.uri,Modifier.size(38.dp).clip(RoundedCornerShape(7.dp)))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(song.title,color=Color.White,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                        Text(song.artist,color=muted,fontSize=12.sp,maxLines=1)
+                                    }
+                                    Icon(Icons.Default.PlayArrow,"Play track",tint=accent)
+                                }
+                            }
+                            if(moodSongs.size>40) Text("Showing first 40 tracks. Use Play this mood for all.",color=muted,fontSize=12.sp)
+                        }
                         Text("Energy and BPM are estimated offline; valence is user-labeled, not guessed.",color=muted,fontSize=12.sp)
                         Text("Manual mood mapping: happiness ${(moodValence*100).toInt()}% / energy ${(moodEnergy*100).toInt()}%",color=muted,fontSize=12.sp)
                         Text("Happiness (valence)",color=muted,fontSize=12.sp)
