@@ -6,6 +6,9 @@ import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -88,17 +91,21 @@ class AudioEngine(private val context:Context) {
 
  private suspend fun process(source:Uri,destination:Uri,format:Format,bitrate:Int,edit:Edit,tags:Metadata?):Result<Unit> =
   withContext(Dispatchers.IO) {
-   runCatching {
+   try {
+    coroutineContext.ensureActive()
+    require(tags!=null || source!=destination) { "Conversion requires a different destination; original file is protected" }
     require(bitrate in listOf(64,96,128,160,192,256,320))
-    require(edit.speed in 0.25..4.0)
-    require(edit.startSeconds>=0)
-    require(edit.endSeconds==null || edit.endSeconds>edit.startSeconds)
+    require(edit.speed.isFinite() && edit.speed in 0.25..4.0)
+    require(edit.startSeconds.isFinite() && edit.startSeconds>=0)
+    require(edit.endSeconds==null || (edit.endSeconds.isFinite() && edit.endSeconds>edit.startSeconds))
     require(edit.removeRanges.size<=32)
-    require(edit.removeRanges.all { it.first>=0 && it.second>it.first })
+    require(edit.removeRanges.all { it.first.isFinite() && it.second.isFinite() && it.first>=0 && it.second>it.first })
     require(edit.removeRanges.all { edit.endSeconds==null || it.first<edit.endSeconds })
+    require(edit.silenceSeconds==null || (edit.silenceSeconds.isFinite() && edit.silenceSeconds in 0.25..30.0))
     val input=File.createTempFile("audio_input_",".tmp",context.cacheDir)
     val output=File.createTempFile("audio_output_",".${format.ext}",context.cacheDir)
     try {
+     coroutineContext.ensureActive()
      context.contentResolver.openInputStream(source)?.use { stream ->
       input.outputStream().use { stream.copyTo(it) }
      } ?: error("Cannot open source")
@@ -111,13 +118,8 @@ class AudioEngine(private val context:Context) {
       filters+="asetpts=PTS-STARTPTS"
      }
      if(edit.removeRanges.isNotEmpty()) {
-      val base=edit.startSeconds
-      val keep=edit.removeRanges.filter { it.second>it.first && it.second>base }
+      val keep=edit.removeRanges.filter { it.second>edit.startSeconds }
        .sortedBy { it.first }
-      var cursor=base
-      for((a,b) in keep) {
-       cursor=maxOf(cursor,b)
-      }
       // select expression removes arbitrary intervals in original timeline.
       // Apply before atrim; replace the previous trimming filters.
       filters.clear()
@@ -166,6 +168,7 @@ class AudioEngine(private val context:Context) {
       "FFmpeg error: ${session.allLogsAsString.takeLast(600)}"
      }
      require(output.length()>0) { "Empty output" }
+     coroutineContext.ensureActive()
      if(tags!=null && source==destination) {
       replaceAndVerify(destination,output,input)
      } else {
@@ -174,7 +177,11 @@ class AudioEngine(private val context:Context) {
       } ?: error("Cannot write destination")
      }
     } finally { input.delete();output.delete() }
-    Unit
+    Result.success(Unit)
+   } catch(cancelled:CancellationException) {
+    throw cancelled
+   } catch(error:Exception) {
+    Result.failure(error)
    }
   }
 }
