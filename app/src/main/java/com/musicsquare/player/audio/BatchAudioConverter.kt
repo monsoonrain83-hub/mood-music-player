@@ -20,6 +20,7 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
         require(sources.isNotEmpty() && sources.size<=200) { "Select 1–200 files" }
         val root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
         val uniqueSources=sources.distinct()
+        val usedNames=mutableSetOf<String>()
         var completed=0
         var failed=0
         val errors=mutableListOf<String>()
@@ -34,10 +35,15 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
             val base=displayName.substringBeforeLast('.',displayName)
                 .replace(Regex("[^\\p{L}\\p{N} _.-]"),"_")
                 .trim().take(90).ifBlank { "audio_${index+1}" }
+            var candidate="${base}_converted.${format.ext}"
+            var suffix=2
+            while(!usedNames.add(candidate.lowercase(java.util.Locale.ROOT))) {
+                candidate="${base}_converted_${suffix++}.${format.ext}"
+            }
             var destination:Uri?=null
             try {
                 destination=DocumentsContract.createDocument(
-                    context.contentResolver,root,format.mime,"${base}_converted.${format.ext}"
+                    context.contentResolver,root,format.mime,candidate
                 ) ?: error("Cannot create destination document")
                 engine.convert(source,destination,format,bitrate).getOrThrow()
                 completed++
