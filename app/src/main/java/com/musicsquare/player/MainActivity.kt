@@ -14,6 +14,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,6 +45,7 @@ import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
+import com.musicsquare.player.audio.WavWaveform
 import com.musicsquare.player.audio.ConversionHistory
 import com.musicsquare.player.audio.AudioClipPreview
 import com.musicsquare.player.audio.BatchAudioConverter
@@ -127,6 +131,7 @@ private fun PlayerApp(controller: MediaController?) {
     val audioEngine = remember { AudioEngine(context) }
     val batchConverter = remember { BatchAudioConverter(context,audioEngine) }
     val clipPreview = remember { AudioClipPreview(context) }
+    val wavWaveform = remember { WavWaveform(context) }
     val conversionHistory = remember { ConversionHistory(context) }
     var historyVersion by remember { mutableIntStateOf(0) }
     val lyricsRepository = remember { LyricsRepository(context) }
@@ -171,11 +176,13 @@ private fun PlayerApp(controller: MediaController?) {
     var previewJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var previewPosition by remember { mutableLongStateOf(0L) }
     var previewDuration by remember { mutableLongStateOf(0L) }
+    var waveformPeaks by remember { mutableStateOf<WavWaveform.Peaks?>(null) }
     var previewError by remember { mutableStateOf<String?>(null) }
     DisposableEffect(Unit) { onDispose { previewJob?.cancel();clipPreview.stop() } }
     LaunchedEffect(wavSource) {
-        previewJob?.cancel();clipPreview.stop();previewPosition=0L;previewDuration=0L;previewError=null
+        previewJob?.cancel();clipPreview.stop();previewPosition=0L;previewDuration=0L;previewError=null;waveformPeaks=null
         val source=wavSource ?: return@LaunchedEffect
+        waveformPeaks=runCatching { wavWaveform.load(source) }.getOrNull()
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val retriever=android.media.MediaMetadataRetriever()
             try {
@@ -1202,6 +1209,23 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             if(previewDuration>0L) {
                                 Text("Audio timeline · ${"%.1f".format(java.util.Locale.US,previewDuration/1000.0)} seconds",color=ink)
+                                waveformPeaks?.let { waveform ->
+                                    Text("PCM WAV waveform · peak envelope",color=muted,fontSize=12.sp)
+                                    Canvas(Modifier.fillMaxWidth().height(108.dp).background(surface, RoundedCornerShape(12.dp)).padding(8.dp)) {
+                                        val peaks=waveform.amplitudes
+                                        val center=size.height/2f
+                                        peaks.forEachIndexed { index, amplitude ->
+                                            val x=(index+0.5f)*size.width/peaks.size
+                                            val extent=(amplitude.coerceIn(0f,1f)*center).coerceAtLeast(1f)
+                                            drawLine(accent,Offset(x,center-extent),Offset(x,center+extent),strokeWidth=(size.width/peaks.size).coerceAtLeast(1f))
+                                        }
+                                        val duration=waveform.durationSeconds.coerceAtLeast(0.001)
+                                        val a=((wavStart.toDoubleOrNull() ?: 0.0)/duration).coerceIn(0.0,1.0).toFloat()*size.width
+                                        val b=((wavEnd.toDoubleOrNull() ?: duration)/duration).coerceIn(0.0,1.0).toFloat()*size.width
+                                        drawLine(Color.White,Offset(a,0f),Offset(a,size.height),strokeWidth=3.dp.toPx())
+                                        drawLine(Color(0xFFFFB86C),Offset(b,0f),Offset(b,size.height),strokeWidth=3.dp.toPx())
+                                    }
+                                }
                                 Text("Trim start",color=muted,fontSize=12.sp)
                                 Slider(value=(wavStart.toFloatOrNull() ?: 0f).coerceIn(0f,previewDuration/1000f),
                                     onValueChange={wavStart="%.2f".format(java.util.Locale.US,it)},
