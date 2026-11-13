@@ -41,6 +41,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
+import com.musicsquare.player.audio.AudioEditInput
 import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
@@ -172,6 +173,8 @@ private fun PlayerApp(controller: MediaController?) {
     var tagAlbum by remember { mutableStateOf("") }
     var tagYear by remember { mutableStateOf("") }
     var tagGenre by remember { mutableStateOf("") }
+    var tagTrack by remember { mutableStateOf("") }
+    var tagComment by remember { mutableStateOf("") }
     var tagStatus by remember { mutableStateOf<String?>(null) }
     var tagBusy by remember { mutableStateOf(false) }
     var selectedTagUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -219,7 +222,8 @@ private fun PlayerApp(controller: MediaController?) {
             val result=audioEngine.writeTags(src,dest,tagFormat,AudioEngine.Metadata(
                 title=tagTitle.takeIf{it.isNotBlank()},artist=tagArtist.takeIf{it.isNotBlank()},
                 album=tagAlbum.takeIf{it.isNotBlank()},year=tagYear.takeIf{it.isNotBlank()},
-                genre=tagGenre.takeIf{it.isNotBlank()}
+                genre=tagGenre.takeIf{it.isNotBlank()},track=tagTrack.takeIf{it.isNotBlank()},
+                comment=tagComment.takeIf{it.isNotBlank()}
             ))
             tagExportStatus=result.fold(onSuccess={"Tagged copy saved"},onFailure={it.message ?: "Metadata export failed"})
             tagBusy=false
@@ -241,21 +245,21 @@ private fun PlayerApp(controller: MediaController?) {
         val src=wavSource
         if(src!=null && dest!=null)scope.launch {
             wavBusy=true
-            val ranges=wavRemoveRanges.split(",").mapNotNull { part ->
-                val t=part.trim().split("-");if(t.size!=2)null else {
-                    val a=t[0].trim().toDoubleOrNull();val b=t[1].trim().toDoubleOrNull()
-                    if(a!=null && b!=null && a>=0 && b>a)a to b else null
-                }
-            }
-            val result=audioEngine.convert(src,dest,cutterFormat,cutterBitrate,AudioEngine.Edit(
-                startSeconds=wavStart.toDoubleOrNull() ?: 0.0,
-                endSeconds=wavEnd.toDoubleOrNull(),removeRanges=ranges,
-                silenceSeconds=if(wavRemoveSilence)wavSilenceSeconds.toDoubleOrNull() ?: 1.5 else null,
-                speed=wavSpeed.toDouble(),preservePitch=cutterPitch
-            ))
-            wavStatus=result.fold(onSuccess={"Edited audio saved"},onFailure={it.message ?: "Audio edit failed"})
-            wavBusy=false
-            refresh()
+            try {
+                val edit=AudioEditInput.parse(wavStart,wavEnd,wavRemoveRanges,wavRemoveSilence,wavSilenceSeconds,wavSpeed.toDouble(),cutterPitch)
+                wavStatus=edit.fold(
+                    onSuccess={ valid ->
+                        val result=audioEngine.convert(src,dest,cutterFormat,cutterBitrate,valid)
+                        result.fold(onSuccess={"Edited audio saved and verified"},onFailure={it.message ?: "Audio edit failed"})
+                    },
+                    onFailure={it.message ?: "Invalid edit parameters"}
+                )
+                refresh()
+            } catch(e:kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch(e:Exception) {
+                wavStatus=e.message ?: "Audio processing failed"
+            } finally { wavBusy=false }
         }
     }
     val wavSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { dest ->
@@ -1038,7 +1042,9 @@ private fun PlayerApp(controller: MediaController?) {
                                         artist=tagArtist.takeIf { it.isNotBlank() },
                                         album=tagAlbum.takeIf { it.isNotBlank() },
                                         year=tagYear.takeIf { it.isNotBlank() },
-                                        genre=tagGenre.takeIf { it.isNotBlank() }
+                                        genre=tagGenre.takeIf { it.isNotBlank() },
+                                        track=tagTrack.takeIf { it.isNotBlank() },
+                                        comment=tagComment.takeIf { it.isNotBlank() }
                                     ))
                                     tagStatus="${results.count { it.success }}/${results.size} files updated; " +
                                         results.filterNot { it.success }.take(3).joinToString { it.message }
