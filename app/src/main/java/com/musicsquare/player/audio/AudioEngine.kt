@@ -96,7 +96,8 @@ class AudioEngine(private val context:Context) {
   val speed:Double=1.0,
   val preservePitch:Boolean=true,
   val fadeInSeconds:Double=0.0,
-  val fadeOutSeconds:Double=0.0
+  val fadeOutSeconds:Double=0.0,
+  val normalizeLoudness:Boolean=false
  )
  data class Metadata(
   val title:String?=null,val artist:String?=null,val album:String?=null,
@@ -174,6 +175,7 @@ class AudioEngine(private val context:Context) {
        filters+="atempo=$remaining"
       } else filters+="asetrate=44100*${edit.speed},aresample=44100"
      }
+     if(edit.normalizeLoudness)filters+="loudnorm=I=-16:TP=-1.5:LRA=11"
      if(filters.isNotEmpty())command+=listOf("-af",filters.joinToString(","))
      if(tags!=null) {
       listOf("title" to tags.title,"artist" to tags.artist,"album" to tags.album,
