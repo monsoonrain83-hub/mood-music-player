@@ -1109,7 +1109,13 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }
                     ) {
-                        DancingCompanion(playing=playing,onDismiss={dancerVisible=false})
+                        val danceAnalysis=current?.let { analysisStore.read(it.id,it.duration) }
+                        DancingCompanion(
+                            playing=playing,
+                            onDismiss={dancerVisible=false},
+                            bpm=danceAnalysis?.bpm,
+                            energy=danceAnalysis?.energy ?: 0.5f
+                        )
                     }
                 }
             }
