@@ -349,7 +349,7 @@ private fun PlayerApp(controller: MediaController?) {
         if(src!=null && dest!=null)scope.launch {
             wavBusy=true
             try {
-                val edit=AudioEditInput.parse(wavStart,wavEnd,wavRemoveRanges,wavRemoveSilence,wavSilenceSeconds,wavSpeed.toDouble(),cutterPitch,wavFadeIn,wavFadeOut,wavNormalize)
+                val edit=AudioEditInput.parse(wavStart,wavEnd,wavRemoveRanges,wavRemoveSilence,wavSilenceSeconds,wavSpeed.toDouble(),cutterPitch,wavFadeIn,wavFadeOut,wavNormalize,previewDuration.takeIf { it>0L }?.div(1000.0))
                 wavStatus=edit.fold(
                     onSuccess={ valid ->
                         val result=audioEngine.convert(src,dest,cutterFormat,cutterBitrate,valid)
