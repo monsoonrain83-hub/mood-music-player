@@ -47,6 +47,7 @@ import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
 import com.musicsquare.player.audio.AudioExportPreset
 import com.musicsquare.player.audio.AudioFileInfo
+import com.musicsquare.player.audio.DecodedWaveform
 import com.musicsquare.player.audio.WavWaveform
 import com.musicsquare.player.audio.ConversionHistory
 import com.musicsquare.player.audio.AudioClipPreview
@@ -137,6 +138,7 @@ private fun PlayerApp(controller: MediaController?) {
     val batchPreflight = remember { BatchPreflight(context) }
     val clipPreview = remember { AudioClipPreview(context) }
     val wavWaveform = remember { WavWaveform(context) }
+    val decodedWaveform = remember { DecodedWaveform(context) }
     val audioInspector = remember { AudioFileInfo(context) }
     val tagInspector = remember { TagInspector(context) }
     val conversionHistory = remember { ConversionHistory(context) }
@@ -214,7 +216,7 @@ private fun PlayerApp(controller: MediaController?) {
     LaunchedEffect(wavSource) {
         previewJob?.cancel();clipPreview.stop();previewPosition=0L;previewDuration=0L;previewError=null;waveformPeaks=null
         val source=wavSource ?: return@LaunchedEffect
-        waveformPeaks=runCatching { wavWaveform.load(source) }.getOrNull()
+        waveformPeaks=runCatching { wavWaveform.load(source) ?: decodedWaveform.load(source) }.getOrNull()
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val retriever=android.media.MediaMetadataRetriever()
             try {
@@ -1301,7 +1303,7 @@ private fun PlayerApp(controller: MediaController?) {
                             if(previewDuration>0L) {
                                 Text("Audio timeline · ${"%.1f".format(java.util.Locale.US,previewDuration/1000.0)} seconds",color=ink)
                                 waveformPeaks?.let { waveform ->
-                                    Text("PCM WAV waveform · peak envelope",color=muted,fontSize=12.sp)
+                                    Text("Decoded audio waveform · peak envelope",color=muted,fontSize=12.sp)
                                     Canvas(Modifier.fillMaxWidth().height(108.dp).background(surface, RoundedCornerShape(12.dp))
                                         .pointerInput(waveform.durationSeconds,wavStart,wavEnd) {
                                             detectTapGestures { tap ->
