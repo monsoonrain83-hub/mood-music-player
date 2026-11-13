@@ -187,16 +187,26 @@ class AudioEngine(private val context:Context) {
        output.inputStream().use { it.copyTo(stream) }
        stream.flush()
       } ?: error("Cannot write destination")
+      // Stream the provider read-back directly into a digest: no second
+      // temporary copy of potentially multi-gigabyte converted audio.
       val expected=digest(output)
-      val verified=File.createTempFile("audio_readback_",".tmp",context.cacheDir)
-      try {
-       context.contentResolver.openInputStream(destination)?.use { stream ->
-        verified.outputStream().use { stream.copyTo(it) }
-       } ?: error("Cannot verify output document")
-       check(expected.contentEquals(digest(verified))) {
-        "Output verification failed; destination may be incomplete"
+      val actual=MessageDigest.getInstance("SHA-256")
+      var bytesRead=0L
+      context.contentResolver.openInputStream(destination)?.use { stream ->
+       val chunk=ByteArray(64*1024)
+       while(true) {
+        coroutineContext.ensureActive()
+        val n=stream.read(chunk)
+        if(n<0)break
+        if(n>0) {
+         actual.update(chunk,0,n)
+         bytesRead+=n
+        }
        }
-      } finally { verified.delete() }
+      } ?: error("Cannot verify output document")
+      check(bytesRead==output.length() && expected.contentEquals(actual.digest())) {
+       "Output verification failed; destination may be incomplete"
+      }
      }
     } finally { input.delete();output.delete() }
     Result.success(Unit)
