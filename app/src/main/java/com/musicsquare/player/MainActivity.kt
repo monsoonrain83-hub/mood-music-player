@@ -156,6 +156,9 @@ private fun PlayerApp(controller: MediaController?) {
     var grouping by remember { mutableStateOf("All") }
     var studioPage by remember { mutableStateOf("Home") }
     var lyricsSearchVersion by remember { mutableIntStateOf(0) }
+    val lyricsPrivacyPrefs = remember { context.getSharedPreferences("lyrics_privacy",android.content.Context.MODE_PRIVATE) }
+    var onlineLyricsEnabled by remember { mutableStateOf(lyricsPrivacyPrefs.getBoolean("online_search",false)) }
+    var lastLyricsSearchVersion by remember { mutableIntStateOf(0) }
     var selectedGroup by remember { mutableStateOf("All") }
     var selectedArtistAlbum by remember { mutableStateOf<String?>(null) }
     var playlistName by remember { mutableStateOf("") }
@@ -400,10 +403,12 @@ private fun PlayerApp(controller: MediaController?) {
             val cached=lyricsRepository.saved(song.title,song.artist,song.duration)
             lyrics=cached
             // A user-triggered search must check online even when plain lyrics are cached.
-            if(cached==null || lyricsSearchVersion>0) {
+            val manualRefresh=lyricsSearchVersion>lastLyricsSearchVersion
+            lastLyricsSearchVersion=lyricsSearchVersion
+            if(onlineLyricsEnabled && (cached==null || manualRefresh)) {
                 lyricsLoading=true
                 try {
-                    val fetched=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration,forceRefresh=lyricsSearchVersion>0)
+                    val fetched=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration,forceRefresh=manualRefresh)
                     if(fetched!=null) lyrics=fetched
                 } finally { lyricsLoading=false }
             }
@@ -545,6 +550,17 @@ private fun PlayerApp(controller: MediaController?) {
                                 OutlinedButton(onClick={skin=option;appearancePrefs.edit().putString("skin",option).apply()}) {
                                     Text(if(skin==option)"✓ $option" else option)
                                 }
+                            }
+                        }
+                        Text("Privacy",fontSize=20.sp,color=accent)
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Checkbox(checked=onlineLyricsEnabled,onCheckedChange={
+                                onlineLyricsEnabled=it
+                                lyricsPrivacyPrefs.edit().putBoolean("online_search",it).apply()
+                            })
+                            Column {
+                                Text("Allow online lyrics lookup",color=ink)
+                                Text("Sends song title, artist, album and duration to LRCLIB over HTTPS. Off by default.",color=muted,fontSize=12.sp)
                             }
                         }
                         Text("Home screen widgets",fontSize=20.sp,color=accent)
