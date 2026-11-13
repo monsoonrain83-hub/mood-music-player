@@ -395,8 +395,9 @@ private fun PlayerApp(controller: MediaController?) {
             sleepMinutes=0
         } else sleepRemaining=0
     }
-    LaunchedEffect(current?.id,lyricsSearchVersion) {
+    LaunchedEffect(current?.id,lyricsSearchVersion,onlineLyricsEnabled) {
         val song=current
+        lyricsLoading=false
         lyrics=null
         lyricsOffset=if(song!=null)lyricsRepository.offsetMs(song.title,song.artist,song.duration) else 0L
         if(song!=null) {
@@ -409,7 +410,7 @@ private fun PlayerApp(controller: MediaController?) {
                 lyricsLoading=true
                 try {
                     val fetched=lyricsRepository.fetch(song.title,song.artist,song.album,song.duration,forceRefresh=manualRefresh)
-                    if(fetched!=null) lyrics=fetched
+                    if(onlineLyricsEnabled && fetched!=null) lyrics=fetched
                 } finally { lyricsLoading=false }
             }
         }
