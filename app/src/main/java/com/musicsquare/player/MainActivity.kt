@@ -1,5 +1,7 @@
 package com.musicsquare.player
 
+import kotlinx.coroutines.ensureActive
+
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
@@ -736,15 +738,23 @@ private fun PlayerApp(controller: MediaController?) {
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
                             scope.launch {
+                                val batch=songs.toList()
                                 analysisProgress="Analyzing local tracks…"
                                 analyzed=0
-                                for ((index,song) in songs.withIndex()) {
-                                    analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
-                                    if (analysisStore.read(song.id,song.duration)==null) {
-                                        analyzer.analyze(song.uri)?.let { analysisStore.save(song.id,song.duration,it); analyzed++ }
+                                try {
+                                    for ((index,song) in batch.withIndex()) {
+                                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                        analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
+                                        if (analysisStore.read(song.id,song.duration)==null) {
+                                            analyzer.analyze(song.uri)?.let {
+                                                analysisStore.save(song.id,song.duration,it)
+                                                analyzed++
+                                            }
+                                        }
                                     }
+                                } finally {
+                                    analysisProgress=null
                                 }
-                                analysisProgress=null
                             }
                         }) { Text("Analyze BPM + energy offline") }
                         analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
