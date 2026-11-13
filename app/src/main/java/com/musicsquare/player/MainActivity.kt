@@ -273,7 +273,7 @@ private fun PlayerApp(controller: MediaController?) {
             batchProgress="Preparing ${batchSources.size} files"
             try {
                 val summary=batchConverter.export(batchSources,tree,converterFormat,converterBitrate) { index,total ->
-                    batchProgress="Processing $"+"{index} of $"+"{total}"
+                    batchProgress="Processing ${index} of ${total}"
                 }
                 conversionHistory.add(converterFormat,summary.completed,summary.failed)
                 historyVersion++
@@ -1181,7 +1181,7 @@ private fun PlayerApp(controller: MediaController?) {
                             if(recentBatches.isEmpty())Text("No completed batches yet",color=muted,fontSize=12.sp)
                             recentBatches.take(5).forEach { entry ->
                                 val date=java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(java.util.Date(entry.timestamp))
-                                Text("$"+"{date} · $"+"{entry.format.uppercase()} · $"+"{entry.completed} saved / $"+"{entry.failed} failed",color=muted,fontSize=12.sp)
+                                Text("${date} · ${entry.format.uppercase()} · ${entry.completed} saved / ${entry.failed} failed",color=muted,fontSize=12.sp)
                             }
                             Text("Single-file conversion",color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
