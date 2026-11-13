@@ -42,6 +42,7 @@ import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
+import com.musicsquare.player.audio.ConversionHistory
 import com.musicsquare.player.audio.AudioClipPreview
 import com.musicsquare.player.audio.BatchAudioConverter
 import com.musicsquare.player.audio.AudioEngine
@@ -126,6 +127,8 @@ private fun PlayerApp(controller: MediaController?) {
     val audioEngine = remember { AudioEngine(context) }
     val batchConverter = remember { BatchAudioConverter(context,audioEngine) }
     val clipPreview = remember { AudioClipPreview(context) }
+    val conversionHistory = remember { ConversionHistory(context) }
+    var historyVersion by remember { mutableIntStateOf(0) }
     val lyricsRepository = remember { LyricsRepository(context) }
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
     var lyricsLoading by remember { mutableStateOf(false) }
@@ -272,6 +275,8 @@ private fun PlayerApp(controller: MediaController?) {
                 val summary=batchConverter.export(batchSources,tree,converterFormat,converterBitrate) { index,total ->
                     batchProgress="Processing $"+"{index} of $"+"{total}"
                 }
+                conversionHistory.add(converterFormat,summary.completed,summary.failed)
+                historyVersion++
                 batchStatus="${summary.completed} converted, ${summary.failed} failed" +
                     summary.errors.take(3).joinToString(separator="; ",prefix=if(summary.errors.isEmpty())"" else ": ")
                 refresh()
@@ -1168,6 +1173,16 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             batchStatus?.let { Text(it,color=muted) }
                             HorizontalDivider()
+                            Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.fillMaxWidth()) {
+                                Text("Recent batches",color=ink,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                TextButton(onClick={conversionHistory.clear();historyVersion++}) { Text("Clear history") }
+                            }
+                            val recentBatches=remember(historyVersion) { conversionHistory.recent() }
+                            if(recentBatches.isEmpty())Text("No completed batches yet",color=muted,fontSize=12.sp)
+                            recentBatches.take(5).forEach { entry ->
+                                val date=java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(java.util.Date(entry.timestamp))
+                                Text("$"+"{date} · $"+"{entry.format.uppercase()} · $"+"{entry.completed} saved / $"+"{entry.failed} failed",color=muted,fontSize=12.sp)
+                            }
                             Text("Single-file conversion",color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("${rate}k")}) }
