@@ -142,6 +142,7 @@ private fun PlayerApp(controller: MediaController?) {
     var converterBusy by remember { mutableStateOf(false) }
     var batchSources by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var batchBusy by remember { mutableStateOf(false) }
+    var batchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var batchProgress by remember { mutableStateOf("") }
     var batchStatus by remember { mutableStateOf<String?>(null) }
     var tagFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
@@ -243,7 +244,7 @@ private fun PlayerApp(controller: MediaController?) {
         batchStatus=if(picked.size>200)"Maximum 200 files per batch; first 200 selected" else null
     }
     val batchFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-        if(tree!=null && batchSources.isNotEmpty() && !batchBusy)scope.launch {
+        if(tree!=null && batchSources.isNotEmpty() && !batchBusy)batchJob=scope.launch {
             batchBusy=true
             batchProgress="Preparing ${batchSources.size} files"
             try {
@@ -260,6 +261,7 @@ private fun PlayerApp(controller: MediaController?) {
                 batchStatus=error.message ?: "Batch conversion failed"
             } finally {
                 batchBusy=false
+                batchJob=null
                 batchProgress=""
             }
         }
@@ -1141,6 +1143,7 @@ private fun PlayerApp(controller: MediaController?) {
                             if(batchBusy) {
                                 LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
                                 Text(batchProgress,color=muted)
+                                OutlinedButton(onClick={batchJob?.cancel()}) { Text("Cancel batch") }
                             }
                             batchStatus?.let { Text(it,color=muted) }
                             HorizontalDivider()
