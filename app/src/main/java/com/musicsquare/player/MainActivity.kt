@@ -42,6 +42,7 @@ import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
+import com.musicsquare.player.audio.AudioClipPreview
 import com.musicsquare.player.audio.BatchAudioConverter
 import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
@@ -124,6 +125,7 @@ private fun PlayerApp(controller: MediaController?) {
     val wavEditor = remember { WavEditor(context) }
     val audioEngine = remember { AudioEngine(context) }
     val batchConverter = remember { BatchAudioConverter(context,audioEngine) }
+    val clipPreview = remember { AudioClipPreview(context) }
     val lyricsRepository = remember { LyricsRepository(context) }
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
     var lyricsLoading by remember { mutableStateOf(false) }
@@ -163,6 +165,25 @@ private fun PlayerApp(controller: MediaController?) {
     var wavSilenceSeconds by remember { mutableStateOf("1.5") }
     var wavStatus by remember { mutableStateOf<String?>(null) }
     var wavBusy by remember { mutableStateOf(false) }
+    var previewJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var previewPosition by remember { mutableLongStateOf(0L) }
+    var previewDuration by remember { mutableLongStateOf(0L) }
+    var previewError by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(Unit) { onDispose { previewJob?.cancel();clipPreview.stop() } }
+    LaunchedEffect(wavSource) {
+        previewJob?.cancel();clipPreview.stop();previewPosition=0L;previewDuration=0L;previewError=null
+        val source=wavSource ?: return@LaunchedEffect
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val retriever=android.media.MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(context,source)
+                val duration=retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { previewDuration=duration }
+            } catch(e:Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { previewError="Preview duration unavailable" }
+            } finally { retriever.release() }
+        }
+    }
     val eqPrefs = remember { context.getSharedPreferences("equalizer",android.content.Context.MODE_PRIVATE) }
     var preset by remember { mutableStateOf(eqPrefs.getString("preset","Flat") ?: "Flat") }
     var bass by remember { mutableFloatStateOf(eqPrefs.getInt("bass",0).toFloat()) }
@@ -1163,6 +1184,35 @@ private fun PlayerApp(controller: MediaController?) {
                             Text(wavSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=cutterFormat==fmt,onClick={cutterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
+                            }
+                            if(previewDuration>0L) {
+                                Text("Audio timeline · ${"%.1f".format(java.util.Locale.US,previewDuration/1000.0)} seconds",color=ink)
+                                Text("Trim start",color=muted,fontSize=12.sp)
+                                Slider(value=(wavStart.toFloatOrNull() ?: 0f).coerceIn(0f,previewDuration/1000f),
+                                    onValueChange={wavStart="%.2f".format(java.util.Locale.US,it)},
+                                    valueRange=0f..(previewDuration/1000f).coerceAtLeast(0.01f))
+                                Text("Trim end",color=muted,fontSize=12.sp)
+                                Slider(value=(wavEnd.toFloatOrNull() ?: previewDuration/1000f).coerceIn(0f,previewDuration/1000f),
+                                    onValueChange={wavEnd="%.2f".format(java.util.Locale.US,it)},
+                                    valueRange=0f..(previewDuration/1000f).coerceAtLeast(0.01f))
+                                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    Button(enabled=wavSource!=null && previewJob?.isActive!=true,onClick={
+                                        val src=wavSource ?: return@Button
+                                        previewError=null
+                                        previewJob=scope.launch {
+                                            try {
+                                                clipPreview.play(src,((wavStart.toDoubleOrNull() ?: 0.0)*1000).toLong(),
+                                                    wavEnd.toDoubleOrNull()?.let { (it*1000).toLong() }) { previewPosition=it }
+                                            } catch(e:kotlinx.coroutines.CancellationException) { throw e }
+                                            catch(e:Exception) { previewError=e.message ?: "Preview failed" }
+                                        }
+                                    }) { Icon(Icons.Default.PlayArrow,null);Text("Preview selection") }
+                                    OutlinedButton(onClick={previewJob?.cancel();clipPreview.stop()}) {
+                                        Icon(Icons.Default.Stop,null);Text("Stop")
+                                    }
+                                }
+                                Text("Preview: ${"%.1f".format(java.util.Locale.US,previewPosition/1000.0)} s",color=muted)
+                                previewError?.let { Text(it,color=Color(0xFFFF9C9C)) }
                             }
                             OutlinedTextField(value=wavStart,onValueChange={wavStart=it},label={Text("Start seconds")},modifier=Modifier.fillMaxWidth())
                             OutlinedTextField(value=wavEnd,onValueChange={wavEnd=it},label={Text("End seconds (blank = end)")},modifier=Modifier.fillMaxWidth())
