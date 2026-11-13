@@ -13,8 +13,10 @@ internal class PlaybackFailurePolicy(private val maxConsecutiveFailures: Int = 3
 
     fun onReady() { failures = 0 }
 
+    val consecutiveFailures: Int get() = failures
+
     fun onFailure(hasNext: Boolean): Boolean {
-        failures++
+        if (failures < Int.MAX_VALUE) failures++
         return hasNext && failures <= maxConsecutiveFailures
     }
 
