@@ -8,7 +8,8 @@ object AudioEditInput {
     fun parse(
         start: String, end: String, ranges: String,
         removeSilence: Boolean, silence: String,
-        speed: Double, preservePitch: Boolean
+        speed: Double, preservePitch: Boolean,
+        fadeIn: String = "0", fadeOut: String = "0"
     ): Result<AudioEngine.Edit> = runCatching {
         val from = start.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull() ?: if(start.isBlank()) 0.0 else error("Invalid start time")
         require(from.isFinite() && from >= 0.0) { "Start time must be a nonnegative number" }
@@ -30,6 +31,11 @@ object AudioEditInput {
             require(value.isFinite() && value in 0.25..30.0) { "Silence duration must be 0.25–30 seconds" }
             value
         } else null
-        AudioEngine.Edit(from,until,cuts,silenceSeconds,speed,preservePitch)
+        val fadeInValue=fadeIn.trim().toDoubleOrNull() ?: error("Invalid fade-in duration")
+        val fadeOutValue=fadeOut.trim().toDoubleOrNull() ?: error("Invalid fade-out duration")
+        require(fadeInValue.isFinite() && fadeInValue in 0.0..30.0) { "Fade-in must be 0–30 seconds" }
+        require(fadeOutValue.isFinite() && fadeOutValue in 0.0..30.0) { "Fade-out must be 0–30 seconds" }
+        require(fadeOutValue==0.0 || (until!=null && until-from>fadeOutValue && cuts.isEmpty() && silenceSeconds==null)) { "Fade-out needs an end time and cannot combine with cuts or silence removal" }
+        AudioEngine.Edit(from,until,cuts,silenceSeconds,speed,preservePitch,fadeInValue,fadeOutValue)
     }
 }
