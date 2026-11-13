@@ -42,10 +42,11 @@ class TagEditor(private val context:Context) {
  }
  suspend fun writeBatch(uris:List<Uri>,changes:TagChanges,onProgress:(Int,Int)->Unit={ _, _ -> }):List<TagResult> =
   withContext(Dispatchers.IO) {
-   uris.mapIndexed { index,uri ->
+   require(uris.size in 1..200) { "Select 1–200 files for batch tagging" }
+   uris.distinct().mapIndexed { index,uri ->
     coroutineContext.ensureActive()
     val result=writeOne(uri,changes)
-    onProgress(index+1,uris.size)
+    withContext(Dispatchers.Main) { onProgress(index+1,uris.distinct().size) }
     result
    }
   }
