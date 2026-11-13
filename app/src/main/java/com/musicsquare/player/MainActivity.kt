@@ -42,6 +42,7 @@ import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
+import com.musicsquare.player.audio.BatchAudioConverter
 import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
@@ -122,6 +123,7 @@ private fun PlayerApp(controller: MediaController?) {
     val tagEditor = remember { TagEditor(context) }
     val wavEditor = remember { WavEditor(context) }
     val audioEngine = remember { AudioEngine(context) }
+    val batchConverter = remember { BatchAudioConverter(context,audioEngine) }
     val lyricsRepository = remember { LyricsRepository(context) }
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
     var lyricsLoading by remember { mutableStateOf(false) }
@@ -138,6 +140,10 @@ private fun PlayerApp(controller: MediaController?) {
     var converterBitrate by remember { mutableIntStateOf(192) }
     var converterStatus by remember { mutableStateOf<String?>(null) }
     var converterBusy by remember { mutableStateOf(false) }
+    var batchSources by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var batchBusy by remember { mutableStateOf(false) }
+    var batchProgress by remember { mutableStateOf("") }
+    var batchStatus by remember { mutableStateOf<String?>(null) }
     var tagFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var tagExportSource by remember { mutableStateOf<Uri?>(null) }
     var tagExportStatus by remember { mutableStateOf<String?>(null) }
@@ -230,6 +236,32 @@ private fun PlayerApp(controller: MediaController?) {
             ))
             tagExportStatus=result.fold(onSuccess={"Tagged copy saved"},onFailure={it.message ?: "Metadata export failed"})
             tagBusy=false
+        }
+    }
+    val batchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { picked ->
+        batchSources=picked.distinct().take(200)
+        batchStatus=if(picked.size>200)"Maximum 200 files per batch; first 200 selected" else null
+    }
+    val batchFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if(tree!=null && batchSources.isNotEmpty() && !batchBusy)scope.launch {
+            batchBusy=true
+            batchProgress="Preparing ${batchSources.size} files"
+            try {
+                val summary=batchConverter.export(batchSources,tree,converterFormat,converterBitrate) { index,total ->
+                    batchProgress="Processing $"+"{index} of $"+"{total}"
+                }
+                batchStatus="${summary.completed} converted, ${summary.failed} failed" +
+                    summary.errors.take(3).joinToString(separator="; ",prefix=if(summary.errors.isEmpty())"" else ": ")
+                refresh()
+            } catch(cancelled:kotlinx.coroutines.CancellationException) {
+                batchStatus="Batch conversion cancelled"
+                throw cancelled
+            } catch(error:Exception) {
+                batchStatus=error.message ?: "Batch conversion failed"
+            } finally {
+                batchBusy=false
+                batchProgress=""
+            }
         }
     }
     val converterPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { converterSource=it }
@@ -1094,6 +1126,25 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             Text("Bitrate: ${converterBitrate} kbps",color=muted)
                             Text("Lossless WAV and FLAC ignore the bitrate setting.",color=muted,fontSize=12.sp)
+                            HorizontalDivider()
+                            Text("Batch conversion",color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
+                            Text("Select up to 200 audio files, then choose an output folder. Originals stay unchanged.",color=muted,fontSize=12.sp)
+                            OutlinedButton(enabled=!batchBusy,onClick={batchPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) {
+                                Icon(Icons.Default.QueueMusic,null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Select multiple audio files")
+                            }
+                            Text("${batchSources.size} files selected",color=muted)
+                            Button(enabled=batchSources.isNotEmpty() && !batchBusy && !converterBusy,onClick={batchFolderPicker.launch(null)}) {
+                                Text(if(batchBusy)"Converting batch..." else "Choose output folder and convert")
+                            }
+                            if(batchBusy) {
+                                LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
+                                Text(batchProgress,color=muted)
+                            }
+                            batchStatus?.let { Text(it,color=muted) }
+                            HorizontalDivider()
+                            Text("Single-file conversion",color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("${rate}k")}) }
                             }
