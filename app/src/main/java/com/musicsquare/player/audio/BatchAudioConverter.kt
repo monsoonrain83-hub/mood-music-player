@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -21,6 +22,16 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
         val root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
         val uniqueSources=sources.distinct()
         val usedNames=mutableSetOf<String>()
+        val children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
+        // Fail closed if the provider cannot enumerate existing files.
+        context.contentResolver.query(children,arrayOf(COLUMN_DISPLAY_NAME),null,null,null)?.use { cursor ->
+            val nameIndex=cursor.getColumnIndex(COLUMN_DISPLAY_NAME)
+            require(nameIndex>=0) { "Output folder cannot list existing filenames" }
+            while(cursor.moveToNext()) {
+                coroutineContext.ensureActive()
+                if(!cursor.isNull(nameIndex))usedNames+=cursor.getString(nameIndex).lowercase(java.util.Locale.ROOT)
+            }
+        } ?: error("Output folder cannot be listed safely")
         var completed=0
         var failed=0
         val errors=mutableListOf<String>()
@@ -32,14 +43,7 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
                     if(cursor.moveToFirst())cursor.getString(0) else null
                 }
             }.getOrNull() ?: "audio_${index+1}"
-            val base=displayName.substringBeforeLast('.',displayName)
-                .replace(Regex("[^\\p{L}\\p{N} _.-]"),"_")
-                .trim().take(90).ifBlank { "audio_${index+1}" }
-            var candidate="${base}_converted.${format.ext}"
-            var suffix=2
-            while(!usedNames.add(candidate.lowercase(java.util.Locale.ROOT))) {
-                candidate="${base}_converted_${suffix++}.${format.ext}"
-            }
+            val candidate=OutputNamePlanner.reserve(displayName,index,format.ext,usedNames)
             var destination:Uri?=null
             try {
                 destination=DocumentsContract.createDocument(
