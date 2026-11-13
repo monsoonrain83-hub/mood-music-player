@@ -149,6 +149,7 @@ private fun PlayerApp(controller: MediaController?) {
     var wavEnd by remember { mutableStateOf("") }
     var wavFadeIn by remember { mutableStateOf("0") }
     var wavFadeOut by remember { mutableStateOf("0") }
+    var wavNormalize by remember { mutableStateOf(false) }
     var wavRemoveRanges by remember { mutableStateOf("") }
     var wavSpeed by remember { mutableFloatStateOf(1f) }
     var wavRemoveSilence by remember { mutableStateOf(false) }
@@ -248,7 +249,7 @@ private fun PlayerApp(controller: MediaController?) {
         if(src!=null && dest!=null)scope.launch {
             wavBusy=true
             try {
-                val edit=AudioEditInput.parse(wavStart,wavEnd,wavRemoveRanges,wavRemoveSilence,wavSilenceSeconds,wavSpeed.toDouble(),cutterPitch,wavFadeIn,wavFadeOut)
+                val edit=AudioEditInput.parse(wavStart,wavEnd,wavRemoveRanges,wavRemoveSilence,wavSilenceSeconds,wavSpeed.toDouble(),cutterPitch,wavFadeIn,wavFadeOut,wavNormalize)
                 wavStatus=edit.fold(
                     onSuccess={ valid ->
                         val result=audioEngine.convert(src,dest,cutterFormat,cutterBitrate,valid)
@@ -1117,6 +1118,11 @@ private fun PlayerApp(controller: MediaController?) {
                                 OutlinedTextField(value=wavFadeOut,onValueChange={wavFadeOut=it},label={Text("Fade out (s)")},modifier=Modifier.weight(1f),singleLine=true)
                             }
                             Text("Fade-out requires an end time and cannot be combined with removing ranges or silence.",color=muted,fontSize=12.sp)
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Checkbox(checked=wavNormalize,onCheckedChange={wavNormalize=it})
+                                Column { Text("Normalize loudness (−16 LUFS target)",color=ink)
+                                    Text("Single-pass EBU R128; results may vary with content.",color=muted,fontSize=12.sp) }
+                            }
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 Checkbox(checked=wavRemoveSilence,onCheckedChange={wavRemoveSilence=it})
                                 Text("Remove long silence",color=muted)
