@@ -29,8 +29,12 @@ class MusicPlaybackService : MediaSessionService() {
         val prefs = getSharedPreferences("equalizer", MODE_PRIVATE)
         preferences = prefs
         fun updateEffects() {
-            equalizer.attach(player.audioSessionId)
-            equalizer.apply(prefs.getString("preset","Flat") ?: "Flat",prefs.getInt("bass",0))
+            // OEM audio effect implementations can throw even on valid sessions.
+            // EQ failure must never interrupt playback.
+            runCatching {
+                equalizer.attach(player.audioSessionId)
+                equalizer.apply(prefs.getString("preset","Flat") ?: "Flat",prefs.getInt("bass",0))
+            }.onFailure { android.util.Log.w("MusicSquareEffects", "EQ unavailable", it) }
         }
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) { updateEffects() }
@@ -55,8 +59,8 @@ class MusicPlaybackService : MediaSessionService() {
                 }
                 runCatching { syncWidgets(player) }
             }
-            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { syncWidgets(player) }
-            override fun onIsPlayingChanged(isPlaying: Boolean) { syncWidgets(player) }
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { runCatching { syncWidgets(player) } }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { runCatching { syncWidgets(player) } }
         })
         preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> updateEffects() }
         prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
@@ -74,8 +78,8 @@ class MusicPlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
     override fun onDestroy() {
         preferences?.let { p -> preferenceListener?.let { p.unregisterOnSharedPreferenceChangeListener(it) } }
-        equalizer.release()
-        session?.run { player.release(); release() }
+        runCatching { equalizer.release() }
+        session?.run { try { player.release() } finally { release() } }
         session = null
         super.onDestroy()
     }
