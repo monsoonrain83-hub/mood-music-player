@@ -671,7 +671,7 @@ private fun PlayerApp(controller: MediaController?) {
                     "Library" -> {
                         Text("Your Library",fontSize=30.sp,fontWeight=FontWeight.Bold,color=ink)
                         Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                            listOf("All","Folder","Artist","Album","Genre","Year","Most played","Favorites","Playlists").forEach { option ->
+                            listOf("All","Folder","Artist","Album","Genre","Year","Most played","Favorites","Playlists","Energetic","Relaxed","Fast tempo","Unanalyzed").forEach { option ->
                                 FilterChip(selected=grouping==option,onClick={grouping=option;selectedGroup="All";selectedArtistAlbum=null},label={Text(option)})
                             }
                         }
@@ -750,10 +750,18 @@ private fun PlayerApp(controller: MediaController?) {
                                 "Genre" -> selectedGroup=="All" || song.genre==selectedGroup
                                 "Year" -> selectedGroup=="All" || song.year.toString()==selectedGroup
                                 "Favorites" -> favorites.getBoolean(song.id.toString(),false)
+                                "Energetic" -> (analysisStore.read(song.id,song.duration)?.energy ?: -1f)>=0.7f
+                                "Relaxed" -> analysisStore.read(song.id,song.duration)?.let { it.energy<=0.35f && (it.bpm==null || it.bpm<=105f) } ?: false
+                                "Fast tempo" -> (analysisStore.read(song.id,song.duration)?.bpm ?: 0f)>=130f
+                                "Unanalyzed" -> analysisStore.read(song.id,song.duration)==null
                                 "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
                                 else -> true
                             })
                         }.let { list -> if(grouping=="Most played" && searchQuery.isBlank()) list.sortedByDescending { extras.plays(it.id) } else list.sortedWith(compareBy { normalizeLibraryText(it.title) }) }
+                        if(grouping in listOf("Energetic","Relaxed","Fast tempo","Unanalyzed") && searchQuery.isBlank()) {
+                            Text("${filtered.size} tracks • On-device audio features only",color=muted,fontSize=12.sp)
+                            if(filtered.isEmpty()) Text("No matching analyzed tracks. Run offline BPM + energy analysis to populate this view.",color=muted,fontSize=12.sp)
+                        }
                         if(searchQuery.isNotBlank()) {
                             Text("${filtered.size} matching songs",color=accent,fontSize=12.sp)
                             if(filtered.isEmpty()) Text("No matching audio found. Try a different title or artist.",color=muted,fontSize=12.sp)
