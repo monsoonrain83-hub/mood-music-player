@@ -130,7 +130,15 @@ class AudioEngine(private val context:Context) {
     try {
      coroutineContext.ensureActive()
      context.contentResolver.openInputStream(source)?.use { stream ->
-      input.outputStream().use { stream.copyTo(it) }
+      input.outputStream().use { target ->
+       val buffer=ByteArray(64*1024)
+       while(true) {
+        coroutineContext.ensureActive()
+        val count=stream.read(buffer)
+        if(count<0)break
+        if(count>0)target.write(buffer,0,count)
+       }
+      }
      } ?: error("Cannot open source")
      val command=mutableListOf("-hide_banner","-loglevel","error","-y","-i",input.absolutePath)
      val filters=mutableListOf<String>()
@@ -203,7 +211,15 @@ class AudioEngine(private val context:Context) {
       replaceAndVerify(destination,output,input)
      } else {
       context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
-       output.inputStream().use { it.copyTo(stream) }
+       output.inputStream().use { inputStream ->
+        val buffer=ByteArray(64*1024)
+        while(true) {
+         coroutineContext.ensureActive()
+         val count=inputStream.read(buffer)
+         if(count<0)break
+         if(count>0)stream.write(buffer,0,count)
+        }
+       }
        stream.flush()
       } ?: error("Cannot write destination")
       // Stream the provider read-back directly into a digest: no second
