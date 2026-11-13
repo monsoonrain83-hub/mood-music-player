@@ -2,6 +2,7 @@ package com.musicsquare.player.audio
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,16 @@ import java.security.MessageDigest
  * All output goes to a newly selected SAF document, never overwriting the input.
  */
 class AudioEngine(private val context:Context) {
+ private fun sameDocument(a:Uri,b:Uri):Boolean {
+  if(a==b) return true
+  if(a.scheme=="content" && b.scheme=="content" && a.authority==b.authority &&
+   DocumentsContract.isDocumentUri(context,a) && DocumentsContract.isDocumentUri(context,b)) {
+   return runCatching {
+    DocumentsContract.getDocumentId(a)==DocumentsContract.getDocumentId(b)
+   }.getOrDefault(false)
+  }
+  return false
+ }
  private fun digest(file:File):ByteArray {
   val hash=MessageDigest.getInstance("SHA-256")
   file.inputStream().use { stream ->
@@ -93,7 +104,7 @@ class AudioEngine(private val context:Context) {
   withContext(Dispatchers.IO) {
    try {
     coroutineContext.ensureActive()
-    require(tags!=null || source!=destination) { "Conversion requires a different destination; original file is protected" }
+    require(tags!=null || !sameDocument(source,destination)) { "Conversion requires a different destination; original file is protected" }
     require(bitrate in listOf(64,96,128,160,192,256,320))
     require(edit.speed.isFinite() && edit.speed in 0.25..4.0)
     require(edit.startSeconds.isFinite() && edit.startSeconds>=0)
@@ -169,7 +180,7 @@ class AudioEngine(private val context:Context) {
      }
      require(output.length()>0) { "Empty output" }
      coroutineContext.ensureActive()
-     if(tags!=null && source==destination) {
+     if(tags!=null && sameDocument(source,destination)) {
       replaceAndVerify(destination,output,input)
      } else {
       context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
