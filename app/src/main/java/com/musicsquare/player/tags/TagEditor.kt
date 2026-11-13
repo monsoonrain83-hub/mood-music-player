@@ -7,6 +7,9 @@ import com.mpatric.mp3agic.ID3v2
 import com.mpatric.mp3agic.ID3v24Tag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -40,6 +43,7 @@ class TagEditor(private val context:Context) {
  suspend fun writeBatch(uris:List<Uri>,changes:TagChanges,onProgress:(Int,Int)->Unit={ _, _ -> }):List<TagResult> =
   withContext(Dispatchers.IO) {
    uris.mapIndexed { index,uri ->
+    coroutineContext.ensureActive()
     val result=writeOne(uri,changes)
     onProgress(index+1,uris.size)
     result
@@ -135,6 +139,8 @@ class TagEditor(private val context:Context) {
     return TagResult(uri,false,"Save failed; original bytes restored: ${writeError.message}")
    }
    return TagResult(uri,true,"Original MP3 updated and byte-for-byte verified")
+  } catch(cancelled:CancellationException) {
+   throw cancelled
   } catch(e:Exception) {
    return TagResult(uri,false,e.localizedMessage ?: "Tag write failed")
   } finally {
