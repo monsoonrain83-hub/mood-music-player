@@ -31,4 +31,19 @@ class PlaybackFailurePolicyTest {
             fail("Expected IllegalArgumentException")
         } catch (_: IllegalArgumentException) {}
     }
+    @Test fun resetClearsRecoveryState() {
+        val policy = PlaybackFailurePolicy(1)
+        assertTrue(policy.onFailure(true))
+        policy.reset()
+        assertEquals(0, policy.consecutiveFailures)
+        assertTrue(policy.onFailure(true))
+    }
+
+    @Test fun countTracksFailuresEvenWithoutNextItem() {
+        val policy = PlaybackFailurePolicy(2)
+        assertFalse(policy.onFailure(false))
+        assertEquals(1, policy.consecutiveFailures)
+        assertTrue(policy.onFailure(true))
+        assertFalse(policy.onFailure(true))
+    }
 }
