@@ -175,6 +175,7 @@ private fun PlayerApp(controller: MediaController?) {
     var tagStatus by remember { mutableStateOf<String?>(null) }
     var tagBusy by remember { mutableStateOf(false) }
     var selectedTagUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var analysisJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var analysisProgress by remember { mutableStateOf<String?>(null) }
     var analyzed by remember { mutableIntStateOf(0) }
     var songs by remember { mutableStateOf<List<LocalSong>>(emptyList()) }
@@ -593,7 +594,7 @@ private fun PlayerApp(controller: MediaController?) {
                          Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
                         Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
                             onClick={
-                                scope.launch {
+                                analysisJob=scope.launch {
                                     analysisProgress="Starting offline analysis"
                                     var successes=0
                                     try {
@@ -624,7 +625,12 @@ private fun PlayerApp(controller: MediaController?) {
                                     } finally { analysisProgress=null }
                                 }
                             },modifier=Modifier.fillMaxWidth()) { Text("Analyze and assign supported moods") }
-                        analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
+                        analysisProgress?.let { progress ->
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
+                                TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel") }
+                            }
+                        }
                         Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
                         Text("Local supervised nearest-neighbour learning, not a pretrained emotion detector. Unsupported songs remain neutral.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
@@ -737,7 +743,7 @@ private fun PlayerApp(controller: MediaController?) {
                         OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
-                            scope.launch {
+                            analysisJob=scope.launch {
                                 val batch=songs.toList()
                                 analysisProgress="Analyzing local tracks…"
                                 analyzed=0
