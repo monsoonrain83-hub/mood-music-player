@@ -18,12 +18,13 @@ class WavWaveform(private val context:Context) {
 
     suspend fun load(uri:Uri,buckets:Int=160):Peaks?=withContext(Dispatchers.IO) {
         require(buckets in 32..512)
+        val activeContext=coroutineContext
         context.contentResolver.openInputStream(uri)?.buffered()?.use { stream ->
             fun readExact(size:Int):ByteArray? {
                 val bytes=ByteArray(size)
                 var offset=0
                 while(offset<size) {
-                    coroutineContext.ensureActive()
+                    activeContext.ensureActive()
                     val n=stream.read(bytes,offset,size-offset)
                     if(n<0)return null
                     if(n==0)continue
