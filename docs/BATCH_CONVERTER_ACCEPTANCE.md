@@ -1,0 +1,5 @@
+# Batch converter acceptance and limitations
+
+Implemented: select up to 200 documents with Android's multi-file picker, select an output SAF folder, sequentially convert MP3/WAV/FLAC/OGG/M4A, show progress and a per-batch success/failure summary, cancel between items, delete incomplete destination documents on conversion failure, preserve input files. Converted output is SHA-256 read-back verified by AudioEngine.
+
+QA needed: SAF folder permissions, duplicate names, cloud-backed providers, full storage, permission revocation, 200 large files, rotation, app backgrounding, cancellation during native FFmpeg execution, malformed audio, filenames with non-Latin characters. Conversion currently runs in a Compose scope and is not durable across activity destruction. Native FFmpeg executeWithArguments is synchronous and may not stop immediately on cancellation. Provider may reject deleteDocument and leave an incomplete destination; this must be reported to users in future work. No parallel transcoding or persistent conversion queue yet.
