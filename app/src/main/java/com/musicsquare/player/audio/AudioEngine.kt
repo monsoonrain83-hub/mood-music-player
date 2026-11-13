@@ -60,13 +60,19 @@ class AudioEngine(private val context:Context) {
   val expected=digest(newFile)
   try {
    overwrite(newFile)
-   val readBack=File.createTempFile("audio_verify_",".tmp",context.cacheDir)
-   try {
-    context.contentResolver.openInputStream(uri)?.use { input ->
-     readBack.outputStream().use { input.copyTo(it) }
-    } ?: error("Cannot read modified document")
-    check(expected.contentEquals(digest(readBack))) { "Saved document differs from generated file" }
-   } finally { readBack.delete() }
+   val actual=MessageDigest.getInstance("SHA-256")
+   var count=0L
+   context.contentResolver.openInputStream(uri)?.use { input ->
+    val chunk=ByteArray(64*1024)
+    while(true) {
+     val n=input.read(chunk)
+     if(n<0)break
+     if(n>0) { actual.update(chunk,0,n); count+=n }
+    }
+   } ?: error("Cannot read modified document")
+   check(count==newFile.length() && expected.contentEquals(actual.digest())) {
+    "Saved document differs from generated file"
+   }
   } catch(writeFailure:Exception) {
    val restoreFailure=runCatching { overwrite(original) }.exceptionOrNull()
    if(restoreFailure!=null)
