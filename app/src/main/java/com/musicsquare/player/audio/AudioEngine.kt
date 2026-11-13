@@ -185,7 +185,18 @@ class AudioEngine(private val context:Context) {
      } else {
       context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
        output.inputStream().use { it.copyTo(stream) }
+       stream.flush()
       } ?: error("Cannot write destination")
+      val expected=digest(output)
+      val verified=File.createTempFile("audio_readback_",".tmp",context.cacheDir)
+      try {
+       context.contentResolver.openInputStream(destination)?.use { stream ->
+        verified.outputStream().use { stream.copyTo(it) }
+       } ?: error("Cannot verify output document")
+       check(expected.contentEquals(digest(verified))) {
+        "Output verification failed; destination may be incomplete"
+       }
+      } finally { verified.delete() }
      }
     } finally { input.delete();output.delete() }
     Result.success(Unit)
