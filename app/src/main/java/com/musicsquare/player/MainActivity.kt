@@ -45,6 +45,7 @@ import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
+import com.musicsquare.player.audio.AudioExportPreset
 import com.musicsquare.player.audio.AudioFileInfo
 import com.musicsquare.player.audio.WavWaveform
 import com.musicsquare.player.audio.ConversionHistory
@@ -1166,6 +1167,17 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             if(studioPage=="Converter") {
                             Text("Audio converter",color=accent,fontWeight=FontWeight.Bold)
+                            Text("Quick export presets",color=ink,fontWeight=FontWeight.SemiBold)
+                            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                AudioExportPreset.entries.forEach { preset ->
+                                    FilterChip(
+                                        selected=converterFormat==preset.format && converterBitrate==preset.bitrateKbps,
+                                        onClick={converterFormat=preset.format;converterBitrate=preset.bitrateKbps},
+                                        label={Text(preset.label)}
+                                    )
+                                }
+                            }
+
                             OutlinedButton(onClick={converterPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source audio") }
                             Text(converterSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
                             converterInfo?.let { info ->
