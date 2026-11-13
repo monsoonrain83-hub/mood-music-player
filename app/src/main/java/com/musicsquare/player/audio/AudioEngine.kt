@@ -94,7 +94,9 @@ class AudioEngine(private val context:Context) {
   val removeRanges:List<Pair<Double,Double>> = emptyList(),
   val silenceSeconds:Double?=null,
   val speed:Double=1.0,
-  val preservePitch:Boolean=true
+  val preservePitch:Boolean=true,
+  val fadeInSeconds:Double=0.0,
+  val fadeOutSeconds:Double=0.0
  )
  data class Metadata(
   val title:String?=null,val artist:String?=null,val album:String?=null,
@@ -115,6 +117,9 @@ class AudioEngine(private val context:Context) {
     require(edit.speed.isFinite() && edit.speed in 0.25..4.0)
     require(edit.startSeconds.isFinite() && edit.startSeconds>=0)
     require(edit.endSeconds==null || (edit.endSeconds.isFinite() && edit.endSeconds>edit.startSeconds))
+    require(edit.fadeInSeconds.isFinite() && edit.fadeInSeconds in 0.0..30.0)
+    require(edit.fadeOutSeconds.isFinite() && edit.fadeOutSeconds in 0.0..30.0)
+    require(edit.fadeOutSeconds==0.0 || (edit.endSeconds!=null && edit.endSeconds-edit.startSeconds>edit.fadeOutSeconds)) { "Fade-out requires an end time after the fade duration" }
     require(edit.removeRanges.size<=32)
     require(edit.removeRanges.all { it.first.isFinite() && it.second.isFinite() && it.first>=0 && it.second>it.first })
     require(edit.removeRanges.all { edit.endSeconds==null || it.first<edit.endSeconds })
@@ -154,6 +159,12 @@ class AudioEngine(private val context:Context) {
       require(sec in 0.25..30.0)
       // silenceremove removes long silent sections, including internal spans.
       filters+="silenceremove=start_periods=0:stop_periods=-1:stop_duration=$sec:stop_threshold=-42dB:stop_silence=0.05"
+     }
+     if(edit.fadeInSeconds>0.0)filters+="afade=t=in:st=0:d=${edit.fadeInSeconds}"
+     if(edit.fadeOutSeconds>0.0) {
+      // This is relative to the trimmed output, before tempo adjustment.
+      val end=edit.endSeconds!!-edit.startSeconds
+      filters+="afade=t=out:st=${end-edit.fadeOutSeconds}:d=${edit.fadeOutSeconds}"
      }
      if(edit.speed!=1.0) {
       if(edit.preservePitch) {
