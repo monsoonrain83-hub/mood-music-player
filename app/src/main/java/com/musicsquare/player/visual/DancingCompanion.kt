@@ -23,19 +23,21 @@ import kotlin.math.cos
  * Does not intercept the entire player surface: only its compact drawing area.
  */
 @Composable
-fun DancingCompanion(playing:Boolean,onDismiss:()->Unit) {
+fun DancingCompanion(playing:Boolean,onDismiss:()->Unit,bpm:Float?=null,energy:Float=0.5f) {
  val infinite=rememberInfiniteTransition(label="dance")
  val phase by infinite.animateFloat(
   initialValue=0f,targetValue=(Math.PI*2).toFloat(),
-  animationSpec=infiniteRepeatable(tween(1300,easing=LinearEasing)),label="dance phase"
+  animationSpec=infiniteRepeatable(tween(if(playing) (60000f/(bpm?.coerceIn(55f,190f) ?: 100f)).toInt().coerceIn(315,1100) else 1200,easing=LinearEasing)),label="dance phase"
  )
  val bounce=if(playing)sin(phase.toDouble()).toFloat() else 0f
+ val intensity=energy.coerceIn(0f,1f)
+ val groove=if(intensity>0.68f) 1.4f else if(intensity<0.32f) 0.55f else 1f
  Box(Modifier.width(170.dp).height(270.dp),contentAlignment=Alignment.Center) {
   Canvas(Modifier.fillMaxSize()) {
    val cx=size.width*0.5f
    val scale=size.width/170f
    fun pt(x:Float,y:Float)=Offset(cx+x*scale,y*scale)
-   val shift=bounce*7f
+   val shift=bounce*7f*groove
    val shadow=Brush.radialGradient(listOf(Color(0x88582EC9),Color.Transparent),center=pt(0f,210f),radius=95f*scale)
    drawCircle(shadow,100f*scale,pt(0f,210f))
    // Shaded hair and face, rendered with gradients for dimensionality.
@@ -52,15 +54,15 @@ fun DancingCompanion(playing:Boolean,onDismiss:()->Unit) {
     close()
    }
    drawPath(dress,Brush.linearGradient(listOf(Color(0xFFEA73DB),Color(0xFF7542CC),Color(0xFF2E225F))))
-   val swing=if(playing)sin(phase.toDouble()).toFloat()*25f else 0f
+   val swing=if(playing)(sin(phase.toDouble()).toFloat()*17f + sin(phase.toDouble()*2.0).toFloat()*8f)*groove else 0f
    fun limb(a:Offset,b:Offset,color:Color,width:Float) {
     drawLine(Color(0x5524142F),a.copy(x=a.x+2*scale,y=a.y+2*scale),b.copy(x=b.x+2*scale,y=b.y+2*scale),strokeWidth=(width+3)*scale,cap=StrokeCap.Round)
     drawLine(color,a,b,strokeWidth=width*scale,cap=StrokeCap.Round)
    }
    limb(pt(-19f,96f+shift),pt(-43f-swing,124f+shift-swing),Color(0xFFE4A08C),10f)
    limb(pt(19f,96f+shift),pt(43f+swing,124f+shift+swing),Color(0xFFE4A08C),10f)
-   limb(pt(-13f,160f+shift),pt(-22f-swing*0.45f,207f),Color(0xFFD6A0AE),12f)
-   limb(pt(13f,160f+shift),pt(22f+swing*0.45f,207f),Color(0xFFD6A0AE),12f)
+   limb(pt(-13f,160f+shift),pt(-22f-swing*0.45f,207f+if(playing)kotlin.math.max(0f,bounce)*-10f*groove else 0f),Color(0xFFD6A0AE),12f)
+   limb(pt(13f,160f+shift),pt(22f+swing*0.45f,207f+if(playing)kotlin.math.max(0f,-bounce)*-10f*groove else 0f),Color(0xFFD6A0AE),12f)
    drawCircle(Color(0x99FFFFFF),4f*scale,pt(-10f,112f+shift))
   }
   TextButton(onClick=onDismiss,modifier=Modifier.align(Alignment.TopEnd)) { Text("×",color=Color.White,fontSize=24.sp) }
