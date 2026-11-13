@@ -15,16 +15,17 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
     data class Summary(val completed:Int,val failed:Int,val errors:List<String>)
     suspend fun export(
         sources:List<Uri>, tree:Uri, format:AudioEngine.Format, bitrate:Int,
-        progress:(Int,Int)->Unit = { _,_-> }
+        progress:suspend (Int,Int)->Unit = { _,_-> }
     ):Summary = withContext(Dispatchers.IO) {
         require(sources.isNotEmpty() && sources.size<=200) { "Select 1–200 files" }
         val root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
+        val uniqueSources=sources.distinct()
         var completed=0
         var failed=0
         val errors=mutableListOf<String>()
-        sources.distinct().forEachIndexed { index,source ->
+        uniqueSources.forEachIndexed { index,source ->
             coroutineContext.ensureActive()
-            progress(index+1,sources.distinct().size)
+            withContext(Dispatchers.Main) { progress(index+1,uniqueSources.size) }
             val displayName=runCatching {
                 context.contentResolver.query(source,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { cursor ->
                     if(cursor.moveToFirst())cursor.getString(0) else null
