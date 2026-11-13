@@ -38,16 +38,22 @@ class MusicPlaybackService : MediaSessionService() {
                 if (playbackState == Player.STATE_READY) playbackFailurePolicy.onReady()
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // Do not let a broken local item stall the queue indefinitely.
-                if (playbackFailurePolicy.onFailure(player.hasNextMediaItem())) {
+                android.util.Log.e("MusicSquarePlayback", "Playback failed: ${error.errorCodeName}", error)
+                // A bad file must not crash the MediaSession service or loop forever.
+                try {
                     val shouldResume = player.playWhenReady
-                    player.seekToNextMediaItem()
-                    player.prepare()
-                    if (shouldResume) player.play()
-                } else {
-                    player.pause()
+                    if (playbackFailurePolicy.onFailure(player.hasNextMediaItem())) {
+                        player.seekToNextMediaItem()
+                        player.prepare()
+                        if (shouldResume) player.play()
+                    } else {
+                        player.pause()
+                    }
+                } catch (recoveryError: Exception) {
+                    android.util.Log.e("MusicSquarePlayback", "Playback recovery failed", recoveryError)
+                    runCatching { player.pause() }
                 }
-                syncWidgets(player)
+                runCatching { syncWidgets(player) }
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { syncWidgets(player) }
             override fun onIsPlayingChanged(isPlaying: Boolean) { syncWidgets(player) }
