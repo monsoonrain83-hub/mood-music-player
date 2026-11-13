@@ -57,7 +57,7 @@ class LyricsRepository(private val context:Context) {
  fun exportLrc(title:String,artist:String,duration:Long):String? {
   val result=saved(title,artist,duration) ?: return null
   if(result.lines.isEmpty())return null
-  return result.lines.joinToString("\\n") { line ->
+  return result.lines.joinToString("\n") { line ->
    val min=line.atMs/60000;val sec=(line.atMs/1000)%60;val cent=(line.atMs%1000)/10
    "[%02d:%02d.%02d] %s".format(java.util.Locale.US,min,sec,cent,line.text)
   }
