@@ -1177,7 +1177,8 @@ private fun PlayerApp(controller: MediaController?) {
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=converterFormat==fmt,onClick={converterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
                             }
-                            Text("Bitrate: ${converterBitrate} kbps",color=muted)
+                            if(converterFormat in listOf(AudioEngine.Format.MP3,AudioEngine.Format.OGG,AudioEngine.Format.M4A)) Text("Bitrate: ${converterBitrate} kbps",color=muted)
+                            else Text("Lossless output: bitrate is codec-controlled",color=muted)
                             Text("Lossless WAV and FLAC ignore the bitrate setting.",color=muted,fontSize=12.sp)
                             HorizontalDivider()
                             Text("Batch conversion",color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
@@ -1210,7 +1211,7 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             Text("Single-file conversion",color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
-                                listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("${rate}k")}) }
+                                listOf(96,128,192,256,320).forEach { rate -> FilterChip(enabled=converterFormat in listOf(AudioEngine.Format.MP3,AudioEngine.Format.OGG,AudioEngine.Format.M4A),selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("${rate}k")}) }
                             }
                             Button(enabled=converterSource!=null && !converterBusy,onClick={
                                 converterSaver.launch("converted.${converterFormat.ext}")
@@ -1230,6 +1231,14 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=cutterFormat==fmt,onClick={cutterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
+                            }
+                            if(cutterFormat in listOf(AudioEngine.Format.MP3,AudioEngine.Format.OGG,AudioEngine.Format.M4A)) {
+                                Text("Export bitrate: ${cutterBitrate} kbps",color=muted)
+                                Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                    listOf(96,128,192,256,320).forEach { rate ->
+                                        FilterChip(selected=cutterBitrate==rate,onClick={cutterBitrate=rate},label={Text("${rate}k")})
+                                    }
+                                }
                             }
                             if(previewDuration>0L) {
                                 Text("Audio timeline · ${"%.1f".format(java.util.Locale.US,previewDuration/1000.0)} seconds",color=ink)
