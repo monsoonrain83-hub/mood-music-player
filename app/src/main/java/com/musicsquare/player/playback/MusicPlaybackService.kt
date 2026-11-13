@@ -79,7 +79,15 @@ class MusicPlaybackService : MediaSessionService() {
     override fun onDestroy() {
         preferences?.let { p -> preferenceListener?.let { p.unregisterOnSharedPreferenceChangeListener(it) } }
         runCatching { equalizer.release() }
-        session?.run { try { player.release() } finally { release() } }
+        session?.let { active ->
+            try {
+                active.player.release()
+            } catch (error: Exception) {
+                android.util.Log.w("MusicSquarePlayback", "Player release failed", error)
+            } finally {
+                runCatching { active.release() }
+            }
+        }
         session = null
         super.onDestroy()
     }
