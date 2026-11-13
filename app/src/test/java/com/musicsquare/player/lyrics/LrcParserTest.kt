@@ -18,4 +18,14 @@ class LrcParserTest {
   assertEquals("اول",lyrics.currentLine(2400))
   assertEquals("دوم",lyrics.currentLine(3000))
  }
+ @Test fun ignoresInvalidSecondsAndPreservesSortedOrder() {
+  val rows=LrcParser.parse("[00:61.00]bad\\n[01:02.5]second\\n[00:02.50]first")
+  assertEquals(2,rows.size)
+  assertEquals(2500L,rows[0].atMs)
+  assertEquals(62500L,rows[1].atMs)
+ }
+ @Test fun limitsExcessiveTimestampRows() {
+  val input=(0..10050).joinToString("\\n") { "[00:01.00]text" }
+  assertEquals(10000,LrcParser.parse(input).size)
+ }
 }
