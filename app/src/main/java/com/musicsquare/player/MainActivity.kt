@@ -16,12 +16,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1211,7 +1211,20 @@ private fun PlayerApp(controller: MediaController?) {
                                 Text("Audio timeline · ${"%.1f".format(java.util.Locale.US,previewDuration/1000.0)} seconds",color=ink)
                                 waveformPeaks?.let { waveform ->
                                     Text("PCM WAV waveform · peak envelope",color=muted,fontSize=12.sp)
-                                    Canvas(Modifier.fillMaxWidth().height(108.dp).background(surface, RoundedCornerShape(12.dp)).padding(8.dp)) {
+                                    Canvas(Modifier.fillMaxWidth().height(108.dp).background(surface, RoundedCornerShape(12.dp))
+                                        .pointerInput(waveform.durationSeconds,wavStart,wavEnd) {
+                                            detectTapGestures { tap ->
+                                                val duration=waveform.durationSeconds
+                                                val selected=(tap.x/size.width.toFloat()).coerceIn(0f,1f)*duration
+                                                val start=wavStart.toDoubleOrNull() ?: 0.0
+                                                val end=wavEnd.toDoubleOrNull() ?: duration
+                                                if(kotlin.math.abs(selected-start)<=kotlin.math.abs(selected-end)) {
+                                                    wavStart="%.2f".format(java.util.Locale.US,selected.coerceAtMost((end-0.01).coerceAtLeast(0.0)))
+                                                } else {
+                                                    wavEnd="%.2f".format(java.util.Locale.US,selected.coerceAtLeast(start+0.01).coerceAtMost(duration))
+                                                }
+                                            }
+                                        }.padding(8.dp)) {
                                         val peaks=waveform.amplitudes
                                         val center=size.height/2f
                                         peaks.forEachIndexed { index, amplitude ->
