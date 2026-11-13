@@ -119,7 +119,7 @@ class AudioEngine(private val context:Context) {
     require(edit.endSeconds==null || (edit.endSeconds.isFinite() && edit.endSeconds>edit.startSeconds))
     require(edit.fadeInSeconds.isFinite() && edit.fadeInSeconds in 0.0..30.0)
     require(edit.fadeOutSeconds.isFinite() && edit.fadeOutSeconds in 0.0..30.0)
-    require(edit.fadeOutSeconds==0.0 || (edit.endSeconds!=null && edit.endSeconds-edit.startSeconds>edit.fadeOutSeconds)) { "Fade-out requires an end time after the fade duration" }
+    require(edit.fadeOutSeconds==0.0 || (edit.endSeconds!=null && edit.endSeconds-edit.startSeconds>edit.fadeOutSeconds && edit.removeRanges.isEmpty() && edit.silenceSeconds==null)) { "Fade-out needs an end time and cannot combine with cut ranges or silence removal" }
     require(edit.removeRanges.size<=32)
     require(edit.removeRanges.all { it.first.isFinite() && it.second.isFinite() && it.first>=0 && it.second>it.first })
     require(edit.removeRanges.all { edit.endSeconds==null || it.first<edit.endSeconds })
