@@ -50,6 +50,7 @@ import com.musicsquare.player.audio.AudioFileInfo
 import com.musicsquare.player.audio.WavWaveform
 import com.musicsquare.player.audio.ConversionHistory
 import com.musicsquare.player.audio.AudioClipPreview
+import com.musicsquare.player.audio.BatchPreflight
 import com.musicsquare.player.audio.BatchAudioConverter
 import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
@@ -132,6 +133,7 @@ private fun PlayerApp(controller: MediaController?) {
     val wavEditor = remember { WavEditor(context) }
     val audioEngine = remember { AudioEngine(context) }
     val batchConverter = remember { BatchAudioConverter(context,audioEngine) }
+    val batchPreflight = remember { BatchPreflight(context) }
     val clipPreview = remember { AudioClipPreview(context) }
     val wavWaveform = remember { WavWaveform(context) }
     val audioInspector = remember { AudioFileInfo(context) }
@@ -163,6 +165,21 @@ private fun PlayerApp(controller: MediaController?) {
     var batchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var batchProgress by remember { mutableStateOf("") }
     var batchStatus by remember { mutableStateOf<String?>(null) }
+    var preflightStatus by remember { mutableStateOf<String?>(null) }
+    var preflightBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(batchSources) {
+        preflightStatus=null
+        if(batchSources.isNotEmpty()) {
+            preflightBusy=true
+            try {
+                val report=batchPreflight.inspect(batchSources)
+                preflightStatus="${report.readable}/${batchSources.size} readable · ${"%.1f".format(java.util.Locale.US,report.totalBytes/1048576.0)} MB known input · ${report.unknownSizes} unknown sizes" +
+                    report.problems.take(2).joinToString(separator="; ",prefix=if(report.problems.isEmpty())"" else " · Issues: ")
+            } catch(e:kotlinx.coroutines.CancellationException) { throw e }
+            catch(e:Exception) { preflightStatus=e.message ?: "Preflight failed" }
+            finally { preflightBusy=false }
+        }
+    }
     var tagFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var tagExportSource by remember { mutableStateOf<Uri?>(null) }
     var tagExportStatus by remember { mutableStateOf<String?>(null) }
@@ -1201,6 +1218,8 @@ private fun PlayerApp(controller: MediaController?) {
                                 Text("Select multiple audio files")
                             }
                             Text("${batchSources.size} files selected",color=muted)
+                            if(preflightBusy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
+                            preflightStatus?.let { Text(it,color=muted,fontSize=12.sp) }
                             Button(enabled=batchSources.isNotEmpty() && !batchBusy && !converterBusy,onClick={batchFolderPicker.launch(null)}) {
                                 Text(if(batchBusy)"Converting batch..." else "Choose output folder and convert")
                             }
