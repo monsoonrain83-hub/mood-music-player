@@ -119,14 +119,20 @@ class TagEditor(private val context:Context) {
    try {
     replacementStarted=true
     writeExact(uri,modified)
-    val digest=sha256(modified)
-    val readback=File.createTempFile("tag_verify_",".mp3",context.cacheDir)
-    try {
-     context.contentResolver.openInputStream(uri)?.use { stream ->
-      readback.outputStream().use { stream.copyTo(it) }
-     } ?: error("Cannot verify document after saving")
-     check(sha256(readback).contentEquals(digest)) { "Document read-back did not match" }
-    } finally { readback.delete() }
+    val expected=sha256(modified)
+    val actual=MessageDigest.getInstance("SHA-256")
+    var bytes=0L
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+     val chunk=ByteArray(64*1024)
+     while(true) {
+      val n=stream.read(chunk)
+      if(n<0)break
+      if(n>0) { actual.update(chunk,0,n); bytes+=n }
+     }
+    } ?: error("Cannot verify document after saving")
+    check(bytes==modified.length() && actual.digest().contentEquals(expected)) {
+     "Document read-back did not match"
+    }
    } catch(writeError:Exception) {
     if(replacementStarted) {
      try {
