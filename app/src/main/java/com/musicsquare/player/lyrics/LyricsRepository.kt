@@ -5,6 +5,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -36,6 +39,8 @@ object LrcParser {
 }
 class LyricsRepository(private val context:Context) {
  private val prefs=context.getSharedPreferences("lyrics_cache",Context.MODE_PRIVATE)
+ private val maxLyricsChars=200_000
+ private val maxNetworkBytes=512*1024
  private fun key(title:String,artist:String,duration:Long):String {
   val bytes=MessageDigest.getInstance("SHA-256").digest("$title|$artist|$duration".toByteArray())
   return bytes.joinToString("") { "%02x".format(it) }
@@ -46,12 +51,14 @@ class LyricsRepository(private val context:Context) {
  }
  fun saved(title:String,artist:String,duration:Long):Lyrics? {
   val raw=prefs.getString(key(title,artist,duration),null) ?: return null
-  return decode(raw,"Offline cache")
+  return if(raw.length<=maxLyricsChars) decode(raw,"Offline cache") else null
  }
  fun saveLrc(title:String,artist:String,duration:Long,lrc:String) {
+  require(lrc.length<=maxLyricsChars) { "LRC exceeds safe size limit" }
   prefs.edit().putString(key(title,artist,duration),JSONObject().put("syncedLyrics",lrc).toString()).apply()
  }
  fun savePlain(title:String,artist:String,duration:Long,plain:String) {
+  require(plain.length<=maxLyricsChars) { "Lyrics exceed safe size limit" }
   prefs.edit().putString(key(title,artist,duration),JSONObject().put("plainLyrics",plain).toString()).apply()
  }
  fun exportLrc(title:String,artist:String,duration:Long):String? {
@@ -65,8 +72,8 @@ class LyricsRepository(private val context:Context) {
  suspend fun fetch(title:String,artist:String,album:String,durationMs:Long,forceRefresh:Boolean=false):Lyrics? =
   withContext(Dispatchers.IO) {
    val cacheKey=key(title,artist,durationMs)
-   if(!forceRefresh) prefs.getString(cacheKey,null)?.let { return@withContext decode(it,"Offline cache") }
-   if(title.isBlank() || artist.isBlank())return@withContext null
+   if(!forceRefresh) prefs.getString(cacheKey,null)?.let { if(it.length<=maxLyricsChars) return@withContext decode(it,"Offline cache") }
+   if(title.isBlank() || artist.isBlank() || title.length>500 || artist.length>500 || album.length>500)return@withContext null
    val params=listOf("track_name" to title,"artist_name" to artist).toMutableList()
    if(album.isNotBlank())params+="album_name" to album
    if(durationMs in 1000..3_600_000)params+="duration" to (durationMs/1000).toString()
@@ -76,16 +83,33 @@ class LyricsRepository(private val context:Context) {
     connection=(URL("https://lrclib.net/api/get?$query").openConnection() as HttpURLConnection)
     connection.connectTimeout=6000
     connection.readTimeout=6000
+    connection.instanceFollowRedirects=false
     connection.setRequestProperty("User-Agent","MusicSquarePlayer/0.3 (https://github.com/monsoonrain83-hub/mood-music-player)")
     if(connection.responseCode!=200)return@withContext null
-    val raw=connection.inputStream.bufferedReader().use { it.readText() }
+    val raw=connection.inputStream.use { input ->
+     val output=java.io.ByteArrayOutputStream()
+     val buffer=ByteArray(8192)
+     while(true) {
+      coroutineContext.ensureActive()
+      val count=input.read(buffer)
+      if(count<0)break
+      if(count>0) {
+       if(output.size()+count>maxNetworkBytes)return@withContext null
+       output.write(buffer,0,count)
+      }
+     }
+     output.toString(Charsets.UTF_8.name())
+    }
+    if(raw.length>maxLyricsChars)return@withContext null
     val decoded=decode(raw,"LRCLIB") ?: return@withContext null
     prefs.edit().putString(cacheKey,raw).apply()
     decoded
-   } catch(_:Exception) { null }
+   } catch(cancelled:CancellationException) { throw cancelled }
+   catch(_:Exception) { null }
    finally { connection?.disconnect() }
   }
  private fun decode(raw:String,source:String):Lyrics?=runCatching {
+  require(raw.length<=maxLyricsChars)
   val obj=JSONObject(raw)
   val synced=obj.optString("syncedLyrics").takeUnless { it=="null" || it.isBlank() }
   val plain=obj.optString("plainLyrics").takeUnless { it=="null" || it.isBlank() }
