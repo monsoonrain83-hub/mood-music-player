@@ -1007,12 +1007,36 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(10.dp))
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             if(studioPage=="Home") {
-                                listOf("Equalizer","Tag Editor","Converter","Cutter").forEach { item ->
-                                    OutlinedButton(onClick={studioPage=item},modifier=Modifier.fillMaxWidth()) { Text(item+"  ›") }
+                                Text("Edit, convert and organize your local audio",color=muted)
+                                val sections=listOf(
+                                    Triple("Equalizer","Tune your listening experience",Icons.Default.Equalizer),
+                                    Triple("Tag Editor","Edit title, artist, album and more",Icons.Default.Edit),
+                                    Triple("Converter","Export MP3, WAV, FLAC, OGG or M4A",Icons.Default.Transform),
+                                    Triple("Cutter","Trim, remove sections, silence and change speed",Icons.Default.ContentCut)
+                                )
+                                sections.forEach { (page,description,icon) ->
+                                    Card(onClick={studioPage=page},modifier=Modifier.fillMaxWidth(),
+                                        colors=CardDefaults.cardColors(containerColor=surface),
+                                        shape=RoundedCornerShape(18.dp)) {
+                                        Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
+                                            Icon(icon,null,tint=accent,modifier=Modifier.size(28.dp))
+                                            Spacer(Modifier.width(16.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text(page,color=ink,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
+                                                Text(description,color=muted,fontSize=12.sp)
+                                            }
+                                            Icon(Icons.Default.ChevronRight,null,tint=muted)
+                                        }
+                                    }
                                 }
+                                Text("Files are processed locally. Keep a backup of irreplaceable recordings.",color=muted,fontSize=12.sp)
                             } else {
-                                TextButton(onClick={studioPage="Home"}) { Text("‹ Audio Studio") }
-                                Text(studioPage,fontSize=22.sp,color=ink,fontWeight=FontWeight.Bold)
+                                TextButton(onClick={studioPage="Home"}) {
+                                    Icon(Icons.Default.ArrowBack,null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("All audio tools")
+                                }
+                                Text(studioPage,fontSize=24.sp,color=ink,fontWeight=FontWeight.Bold)
                             }
                             if(studioPage=="Equalizer") {
                             Text("Equalizer",color=accent,fontWeight=FontWeight.Bold)
@@ -1034,6 +1058,9 @@ private fun PlayerApp(controller: MediaController?) {
                             OutlinedTextField(value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
                             OutlinedTextField(value=tagYear,onValueChange={tagYear=it},label={Text("Year")},modifier=Modifier.fillMaxWidth())
                             OutlinedTextField(value=tagGenre,onValueChange={tagGenre=it},label={Text("Genre")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=tagTrack,onValueChange={tagTrack=it},label={Text("Track number (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=tagComment,onValueChange={tagComment=it},label={Text("Comment (blank = unchanged)")},modifier=Modifier.fillMaxWidth(),minLines=2)
+                            Text("Batch editing changes the selected original files. Back up important recordings first.",color=muted,fontSize=12.sp)
                             Button(enabled=!tagBusy && selectedTagUris.isNotEmpty(),onClick={
                                 scope.launch {
                                     tagBusy=true
@@ -1063,6 +1090,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=converterFormat==fmt,onClick={converterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
                             }
                             Text("Bitrate: ${converterBitrate} kbps",color=muted)
+                            Text("Lossless WAV and FLAC ignore the bitrate setting.",color=muted,fontSize=12.sp)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 listOf(96,128,192,256,320).forEach { rate -> FilterChip(selected=converterBitrate==rate,onClick={converterBitrate=rate},label={Text("${rate}k")}) }
                             }
@@ -1093,7 +1121,10 @@ private fun PlayerApp(controller: MediaController?) {
                                 Checkbox(checked=cutterPitch,onCheckedChange={cutterPitch=it})
                                 Text("Preserve pitch",color=muted)
                             }
-                            Button(enabled=wavSource!=null && !wavBusy,onClick={cutterSaver.launch("edited.${cutterFormat.ext}")}) {
+                            val cutterInput=AudioEditInput.parse(wavStart,wavEnd,wavRemoveRanges,wavRemoveSilence,wavSilenceSeconds,wavSpeed.toDouble(),cutterPitch)
+                            cutterInput.exceptionOrNull()?.message?.let { Text(it,color=Color(0xFFFF9C9C),fontSize=12.sp) }
+                            Text("Time values are in seconds. All selected cuts are removed before exporting.",color=muted,fontSize=12.sp)
+                            Button(enabled=wavSource!=null && !wavBusy && cutterInput.isSuccess,onClick={cutterSaver.launch("edited.${cutterFormat.ext}")}) {
                                 Text(if(wavBusy)"Processing..." else "Process and save")
                             }
                             wavStatus?.let { Text(it,color=muted) }
