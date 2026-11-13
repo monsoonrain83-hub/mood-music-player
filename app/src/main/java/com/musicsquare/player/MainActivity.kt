@@ -63,6 +63,7 @@ import com.musicsquare.player.data.LibraryExtras
 import com.musicsquare.player.visual.DancingCompanion
 import com.musicsquare.player.lyrics.LyricsRepository
 import com.musicsquare.player.lyrics.Lyrics
+import com.musicsquare.player.tags.TagInspector
 import com.musicsquare.player.tags.TagEditor
 import com.musicsquare.player.tags.TagChanges
 import android.net.Uri
@@ -137,6 +138,7 @@ private fun PlayerApp(controller: MediaController?) {
     val clipPreview = remember { AudioClipPreview(context) }
     val wavWaveform = remember { WavWaveform(context) }
     val audioInspector = remember { AudioFileInfo(context) }
+    val tagInspector = remember { TagInspector(context) }
     val conversionHistory = remember { ConversionHistory(context) }
     var historyVersion by remember { mutableIntStateOf(0) }
     val lyricsRepository = remember { LyricsRepository(context) }
@@ -248,6 +250,7 @@ private fun PlayerApp(controller: MediaController?) {
     var tagComment by remember { mutableStateOf("") }
     var tagStatus by remember { mutableStateOf<String?>(null) }
     var tagBusy by remember { mutableStateOf(false) }
+    var tagReadBusy by remember { mutableStateOf(false) }
     var selectedTagUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var analysisJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var analysisProgress by remember { mutableStateOf<String?>(null) }
@@ -1153,6 +1156,30 @@ private fun PlayerApp(controller: MediaController?) {
                             Text("Batch tag editor • MP3, FLAC, WAV, OGG, M4A",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
                             Text("${selectedTagUris.size} selected",color=muted)
+                            OutlinedButton(enabled=selectedTagUris.size==1 && !tagBusy && !tagReadBusy,onClick={
+                                val uri=selectedTagUris.singleOrNull() ?: return@OutlinedButton
+                                scope.launch {
+                                    tagReadBusy=true
+                                    try {
+                                        val current=tagInspector.read(uri)
+                                        tagTitle=current.title.orEmpty()
+                                        tagArtist=current.artist.orEmpty()
+                                        tagAlbum=current.album.orEmpty()
+                                        tagYear=current.year.orEmpty()
+                                        tagGenre=current.genre.orEmpty()
+                                        tagTrack=current.track.orEmpty()
+                                        tagComment=""
+                                        tagStatus="Loaded available embedded tags. Review fields before saving; blank fields stay unchanged."
+                                    } catch(e:Exception) {
+                                        tagStatus=e.message ?: "Cannot read embedded tags"
+                                    } finally { tagReadBusy=false }
+                                }
+                            }) {
+                                Icon(Icons.Default.Download,null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(if(tagReadBusy)"Reading tags..." else "Load existing tags (single file)")
+                            }
+
                             OutlinedTextField(value=tagTitle,onValueChange={tagTitle=it},label={Text("Title (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
                             OutlinedTextField(value=tagArtist,onValueChange={tagArtist=it},label={Text("Artist")},modifier=Modifier.fillMaxWidth())
                             OutlinedTextField(value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
