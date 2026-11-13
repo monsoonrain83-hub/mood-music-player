@@ -605,8 +605,15 @@ private fun PlayerApp(controller: MediaController?) {
                                                 if(store.cell(song.id)==null) {
                                                     // User-trained supervised model abstains when evidence is insufficient.
                                                     val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
-                                                    store.assign(song.id,prediction?.cell ?: MoodCoordinates.cell(result.valence ?: 0.5f,result.energy.coerceIn(0f,1f)))
-                                                    assignmentsVersion++
+                                                    // Never fabricate neutral valence: abstain unless a
+                                                    // supervised prediction or actual valence is available.
+                                                    val inferredCell=prediction?.cell ?: result.valence?.let { value ->
+                                                        MoodCoordinates.cell(value,result.energy.coerceIn(0f,1f))
+                                                    }
+                                                    if(inferredCell!=null) {
+                                                        store.assign(song.id,inferredCell)
+                                                        assignmentsVersion++
+                                                    }
                                                 }
                                                 successes++
                                             }
@@ -614,7 +621,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         analyzed=successes
                                     } finally { analysisProgress=null }
                                 }
-                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze and populate mood grid") }
+                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze and assign supported moods") }
                         analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
                         Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
                         Text("Local supervised nearest-neighbour learning, not a pretrained emotion detector. Unsupported songs remain neutral.",color=muted,fontSize=11.sp)
