@@ -1,30 +1,43 @@
 # MusicSquare Player
 
-Offline-first Android music player built with Kotlin, Jetpack Compose Material 3, Media3 ExoPlayer, and MediaSessionService.
+Offline-first Android music player written in Kotlin and Jetpack Compose, using Media3 ExoPlayer and MediaSessionService. Android minSdk 24, targetSdk 34.
 
-## Current capabilities
-- Browse local music using Android MediaStore (Android 7–14).
-- Play local audio in a Media3 background service with system media session controls.
-- Navigate between a 5×5 mood-energy grid, local library, now-playing screen, and settings.
-- Assign songs to mood cells offline and save assignments on device.
-- Play songs from a selected mood cell.
-- Seek, skip, pause, resume, and share song metadata.
+## Implemented in source
 
-## New library tools (November 2026)
-- Group tracks by folder, artist, album, genre, year, favorites, and play count.
-- Create local playlists and add songs to them.
-- Share original audio bytes using Android ACTION_SEND with EXTRA_STREAM and URI read grants, not a URL.
-- Android Equalizer presets (Flat, Bass Boost, Treble Boost, Vocal, Rock, Jazz, Classical, Dance) and bass strength slider. Audio effects are hardware-dependent.
-- Batch MP3 embedded ID3 tag editor via Android Storage Access Framework: select one or more writable MP3 documents, enter only fields to change, then write the modified files back to their original URIs. This is NOT yet a general-purpose FLAC/OGG/M4A editor.
+- MediaStore local library: songs, artist, album, folder, genre, year, favorites, most-played, user playlists and an alphabet rail.
+- Persian/Arabic character-normalized search and alphabetical sorting.
+- Local playback and background MediaSession controls; seek, shuffle, repeat, queue and sleep timer.
+- Direct **audio file** sharing via `ACTION_SEND`, `EXTRA_STREAM` and temporary URI read grants (not a link).
+- SAF-based embedded tag writing to selected source documents, including MP3 ID3 verification and rollback attempts. Other supported formats use FFmpegKit; provider permissions and codec/container support vary. SAF writes are not atomic.
+- Offline BPM and RMS-derived energy analysis, with cancellation and bounded decoding time; supported decoder outputs include 8-bit, 16-bit and float PCM.
+- Four explainable acoustic library views: Energetic, Relaxed, Fast tempo and Unanalyzed. These are heuristics, **not** validated emotion classifiers.
+- On-device personalized mood nearest-neighbour predictions from explicitly labeled tracks, with abstention for insufficient evidence.
+- A responsive 5×5 mood grid, editable user labels, a lightweight 2.5D animated dancer linked to BPM and energy, and local artwork.
+- EQ presets, local lyrics with import/export and optional LRCLIB online search, appearance skins and three widget sizes.
+- Online lyrics lookup is **off by default** and requires opt-in; when enabled, title, artist, album and duration are transmitted to LRCLIB over HTTPS.
 
-## Important limitations
-This is an **early functional implementation, not a production release**. Mood assignment is manual. Automatic valence inference, Room, Hilt, artwork loading, theme selection, and Spotify integration are **not implemented**. The grid mapping model is unit-tested but is not yet wired to automatic analysis.
+## Important limitations and verification
 
-## Build
-Open the repository in Android Studio (JDK 17, Android SDK 35). Sync Gradle and run the `app` configuration. GitHub Actions builds a debug APK on pushes to `main` and uploads it as an artifact if successful. CI has not yet been independently verified.
+This repository is **not a certified production release**. A 2.5D Compose dancer is not a skeletal 3D model. Audio-derived energy is a loudness proxy; automatic emotional valence recognition has not been scientifically validated. Streaming catalogs and Spotify/SoundCloud integrations are not implemented.
+
+Automated CI runs static security checks, Python regression tests, JVM unit tests, debug APK compilation, and an Android emulator startup test. A passing build **does not** establish zero crashes or acceptable battery life on physical phones. Multi-hour playback, Bluetooth/headset/audio-focus handling, power profiling, OEM EQ compatibility, file-tag recovery, accessibility audits, and independent security testing require physical-device evidence.
+
+## Build and tests
+
+Use JDK 17 and Android SDK 35, then run:
+
+```bash
+gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
+python3 tools/security_audit.py
+python3 -m unittest discover -s tools/tests -v
+```
+
+GitHub Actions publishes `MusicSquare-debug-apk` for successful debug builds. Do not treat debug artifacts as signed production releases.
 
 ## Privacy
-Music discovery and playback do not require an account or network permission. The app requests local audio access at runtime.
+
+No cloud upload is required for local library discovery, playback, BPM/energy analysis or mood predictions. The app requests Android audio access at runtime, disables cleartext traffic and disables Android app-data backup. External lyrics requests are opt-in. File sharing occurs only when initiated by the user through Android's share sheet.
 
 ## Design
+
 Editable Figma mockups: https://www.figma.com/design/Uh6pWN1HDrNlOb9TpBQvtV
