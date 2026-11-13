@@ -7,6 +7,9 @@ import android.media.MediaFormat
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
+import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
@@ -57,6 +60,7 @@ class OfflineAudioAnalyzer(private val context: Context) {
             val maxSamples = sampleRate.toLong() * 45 * channels
             var loops = 0
             while (!outputEnded && totalSamples < maxSamples && loops++ < 100000) {
+                coroutineContext.ensureActive()
                 if (!inputEnded) {
                     val index = decoder.dequeueInputBuffer(10000)
                     if (index >= 0) {
@@ -82,10 +86,21 @@ class OfflineAudioAnalyzer(private val context: Context) {
                             // Most Android PCM decoders emit signed 16-bit audio.
                             val outputFormat = decoder.outputFormat
                             val encoding = if (outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) else android.media.AudioFormat.ENCODING_PCM_16BIT
-                            if (encoding == android.media.AudioFormat.ENCODING_PCM_16BIT) {
-                                while (pcm.remaining() >= 2 && totalSamples < maxSamples) {
-                                    val sample = pcm.short.toDouble() / 32768.0
-                                    val sq = sample * sample
+                            val bytesPerSample = when (encoding) {
+                                android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
+                                android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
+                                android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
+                                else -> 0
+                            }
+                            if (bytesPerSample > 0) {
+                                while (pcm.remaining() >= bytesPerSample && totalSamples < maxSamples) {
+                                    val sample = when (encoding) {
+                                        android.media.AudioFormat.ENCODING_PCM_FLOAT -> pcm.float.toDouble()
+                                        android.media.AudioFormat.ENCODING_PCM_8BIT -> (pcm.get().toInt() and 0xff).minus(128) / 128.0
+                                        else -> pcm.short.toDouble() / 32768.0
+                                    }
+                                    if (!sample.isFinite()) continue
+                                    val sq = sample.coerceIn(-1.0, 1.0).let { it * it }
                                     totalSquared += sq
                                     windowSum += sq
                                     totalSamples++
@@ -110,6 +125,8 @@ class OfflineAudioAnalyzer(private val context: Context) {
             val energy = (rms / 0.24f).coerceIn(0f, 1f)
             val bpm = estimateBpm(envelope)
             AudioAnalysis(energy, bpm.first, bpm.second)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         } finally {
