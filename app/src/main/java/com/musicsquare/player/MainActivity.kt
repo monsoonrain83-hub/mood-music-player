@@ -750,10 +750,8 @@ private fun PlayerApp(controller: MediaController?) {
                                 "Genre" -> selectedGroup=="All" || song.genre==selectedGroup
                                 "Year" -> selectedGroup=="All" || song.year.toString()==selectedGroup
                                 "Favorites" -> favorites.getBoolean(song.id.toString(),false)
-                                "Energetic" -> (analysisStore.read(song.id,song.duration)?.energy ?: -1f)>=0.7f
-                                "Relaxed" -> analysisStore.read(song.id,song.duration)?.let { it.energy<=0.35f && (it.bpm==null || it.bpm<=105f) } ?: false
-                                "Fast tempo" -> (analysisStore.read(song.id,song.duration)?.bpm ?: 0f)>=130f
-                                "Unanalyzed" -> analysisStore.read(song.id,song.duration)==null
+                                "Energetic","Relaxed","Fast tempo","Unanalyzed" ->
+                                    com.musicsquare.player.data.SmartLibraryFilters.matches(grouping,analysisStore.read(song.id,song.duration))
                                 "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
                                 else -> true
                             })
