@@ -27,9 +27,10 @@ object LrcParser {
    val matches=stamp.findAll(row).toList()
    val lyric=stamp.replace(row,"").trim()
    for(m in matches) {
+    if(result.size>=10000) return result.sortedBy { it.atMs }
     val min=m.groupValues[1].toLongOrNull() ?: continue
     val sec=m.groupValues[2].toLongOrNull() ?: continue
-    if(sec>=60)continue
+    if(sec>=60 || min>999)continue
     val frac=m.groupValues[3].padEnd(3,'0').take(3).toLongOrNull() ?: 0L
     result+=TimedLine((min*60+sec)*1000+frac,lyric)
    }
