@@ -45,6 +45,7 @@ import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
 import com.musicsquare.player.audio.AudioEditInput
+import com.musicsquare.player.audio.AudioFileInfo
 import com.musicsquare.player.audio.WavWaveform
 import com.musicsquare.player.audio.ConversionHistory
 import com.musicsquare.player.audio.AudioClipPreview
@@ -132,6 +133,7 @@ private fun PlayerApp(controller: MediaController?) {
     val batchConverter = remember { BatchAudioConverter(context,audioEngine) }
     val clipPreview = remember { AudioClipPreview(context) }
     val wavWaveform = remember { WavWaveform(context) }
+    val audioInspector = remember { AudioFileInfo(context) }
     val conversionHistory = remember { ConversionHistory(context) }
     var historyVersion by remember { mutableIntStateOf(0) }
     val lyricsRepository = remember { LyricsRepository(context) }
@@ -146,6 +148,11 @@ private fun PlayerApp(controller: MediaController?) {
     var lyricsMessage by remember { mutableStateOf<String?>(null) }
     var lyricsOffset by remember { mutableLongStateOf(0L) }
     var converterSource by remember { mutableStateOf<Uri?>(null) }
+    var converterInfo by remember { mutableStateOf<AudioFileInfo.Details?>(null) }
+    LaunchedEffect(converterSource) {
+        converterInfo=null
+        converterSource?.let { src -> converterInfo=runCatching { audioInspector.inspect(src) }.getOrNull() }
+    }
     var converterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var converterBitrate by remember { mutableIntStateOf(192) }
     var converterStatus by remember { mutableStateOf<String?>(null) }
@@ -159,6 +166,11 @@ private fun PlayerApp(controller: MediaController?) {
     var tagExportSource by remember { mutableStateOf<Uri?>(null) }
     var tagExportStatus by remember { mutableStateOf<String?>(null) }
     var wavSource by remember { mutableStateOf<Uri?>(null) }
+    var cutterInfo by remember { mutableStateOf<AudioFileInfo.Details?>(null) }
+    LaunchedEffect(wavSource) {
+        cutterInfo=null
+        wavSource?.let { src -> cutterInfo=runCatching { audioInspector.inspect(src) }.getOrNull() }
+    }
     var cutterFormat by remember { mutableStateOf(AudioEngine.Format.MP3) }
     var cutterBitrate by remember { mutableIntStateOf(192) }
     var cutterPitch by remember { mutableStateOf(true) }
@@ -1156,6 +1168,12 @@ private fun PlayerApp(controller: MediaController?) {
                             Text("Audio converter",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={converterPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source audio") }
                             Text(converterSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
+                            converterInfo?.let { info ->
+                                val durationText=info.durationMs?.let { "%.1f s".format(java.util.Locale.US,it/1000.0) } ?: "Unknown duration"
+                                val sizeText=info.bytes?.let { "%.2f MB".format(java.util.Locale.US,it/1048576.0) } ?: "Unknown size"
+                                val bitrateText=info.bitrate?.let { "${it/1000} kbps" } ?: "Unknown bitrate"
+                                Text("${info.name} · ${durationText} · ${sizeText} · ${bitrateText}",color=muted,fontSize=12.sp)
+                            }
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=converterFormat==fmt,onClick={converterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
                             }
@@ -1204,6 +1222,12 @@ private fun PlayerApp(controller: MediaController?) {
                             Text("Audio cutter / silence / speed",color=accent,fontWeight=FontWeight.Bold)
                             OutlinedButton(onClick={wavPicker.launch(arrayOf("audio/*","application/octet-stream"))}) { Text("Select source to edit") }
                             Text(wavSource?.lastPathSegment ?: "No source",color=muted,maxLines=1)
+                            cutterInfo?.let { info ->
+                                val durationText=info.durationMs?.let { "%.1f s".format(java.util.Locale.US,it/1000.0) } ?: "Unknown duration"
+                                val sizeText=info.bytes?.let { "%.2f MB".format(java.util.Locale.US,it/1048576.0) } ?: "Unknown size"
+                                val bitrateText=info.bitrate?.let { "${it/1000} kbps" } ?: "Unknown bitrate"
+                                Text("${info.name} · ${durationText} · ${sizeText} · ${bitrateText}",color=muted,fontSize=12.sp)
+                            }
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 AudioEngine.Format.entries.forEach { fmt -> FilterChip(selected=cutterFormat==fmt,onClick={cutterFormat=fmt},label={Text(fmt.ext.uppercase())}) }
                             }
