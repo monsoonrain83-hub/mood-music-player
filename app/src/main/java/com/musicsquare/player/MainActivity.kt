@@ -53,6 +53,12 @@ import com.musicsquare.player.audio.ConversionHistory
 import com.musicsquare.player.audio.AudioClipPreview
 import com.musicsquare.player.audio.BatchPreflight
 import com.musicsquare.player.audio.BatchAudioConverter
+import com.musicsquare.player.audio.BatchConversionWorker
+import androidx.work.WorkManager
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import androidx.work.WorkInfo
+import kotlinx.coroutines.flow.collectLatest
 import com.musicsquare.player.audio.AudioEngine
 import com.musicsquare.player.audio.WavEditor
 import com.musicsquare.player.audio.WavEdit
@@ -311,30 +317,50 @@ private fun PlayerApp(controller: MediaController?) {
     val batchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { picked ->
         val unique=picked.distinct()
         batchSources=if(unique.size<=200)unique else emptyList()
+        unique.take(200).forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
         batchStatus=if(unique.size>200)"Too many files selected: maximum 200. No files were queued; select a smaller batch." else null
     }
-    val batchFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-        if(tree!=null && batchSources.isNotEmpty() && !batchBusy)batchJob=scope.launch {
-            batchBusy=true
-            batchProgress="Preparing ${batchSources.size} files"
-            try {
-                val summary=batchConverter.export(batchSources,tree,converterFormat,converterBitrate) { index,total ->
-                    batchProgress="Processing ${index} of ${total}"
+    val workManager=remember { WorkManager.getInstance(context) }
+    LaunchedEffect(workManager) {
+        workManager.getWorkInfosForUniqueWorkFlow(BatchConversionWorker.UNIQUE_NAME).collectLatest { infos ->
+            val work=infos.firstOrNull() ?: return@collectLatest
+            val running=work.state==WorkInfo.State.ENQUEUED || work.state==WorkInfo.State.RUNNING ||
+                work.state==WorkInfo.State.BLOCKED
+            batchBusy=running
+            batchProgress=when(work.state) {
+                WorkInfo.State.RUNNING -> "Processing ${work.progress.getInt(BatchConversionWorker.KEY_INDEX,0)} of ${work.progress.getInt(BatchConversionWorker.KEY_TOTAL,0)}"
+                WorkInfo.State.ENQUEUED -> "Queued for background conversion"
+                WorkInfo.State.BLOCKED -> "Waiting for earlier work"
+                else -> ""
+            }
+            if(!running) {
+                batchStatus=when(work.state) {
+                    WorkInfo.State.SUCCEEDED -> "${work.outputData.getInt(BatchConversionWorker.KEY_DONE,0)} converted successfully"
+                    WorkInfo.State.FAILED -> "Batch failed: ${work.outputData.getString(BatchConversionWorker.KEY_ERROR).orEmpty()}"
+                    WorkInfo.State.CANCELLED -> "Batch cancelled"
+                    else -> batchStatus
                 }
-                conversionHistory.add(converterFormat,summary.completed,summary.failed)
-                historyVersion++
-                batchStatus="${summary.completed} converted, ${summary.failed} failed" +
-                    summary.errors.take(3).joinToString(separator="; ",prefix=if(summary.errors.isEmpty())"" else ": ")
-                refresh()
-            } catch(cancelled:kotlinx.coroutines.CancellationException) {
-                batchStatus="Batch conversion cancelled"
-                throw cancelled
+            }
+        }
+    }
+    val batchFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if(tree!=null && batchSources.isNotEmpty() && preflightPassed && !batchBusy) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    tree,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                val request=OneTimeWorkRequestBuilder<BatchConversionWorker>()
+                    .setInputData(BatchConversionWorker.request(batchSources,tree,converterFormat,converterBitrate))
+                    .build()
+                workManager.enqueueUniqueWork(BatchConversionWorker.UNIQUE_NAME,ExistingWorkPolicy.KEEP,request)
+                batchStatus="Batch submitted to background queue"
             } catch(error:Exception) {
-                batchStatus=error.message ?: "Batch conversion failed"
-            } finally {
-                batchBusy=false
-                batchJob=null
-                batchProgress=""
+                batchStatus=error.message ?: "Could not schedule background conversion"
             }
         }
     }
@@ -1259,7 +1285,7 @@ private fun PlayerApp(controller: MediaController?) {
                             if(batchBusy) {
                                 LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
                                 Text(batchProgress,color=muted)
-                                OutlinedButton(onClick={batchJob?.cancel()}) { Text("Cancel batch") }
+                                OutlinedButton(onClick={workManager.cancelUniqueWork(BatchConversionWorker.UNIQUE_NAME)}) { Text("Cancel batch") }
                             }
                             batchStatus?.let { Text(it,color=muted) }
                             HorizontalDivider()
