@@ -309,8 +309,9 @@ private fun PlayerApp(controller: MediaController?) {
         }
     }
     val batchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { picked ->
-        batchSources=picked.distinct().take(200)
-        batchStatus=if(picked.size>200)"Maximum 200 files per batch; first 200 selected" else null
+        val unique=picked.distinct()
+        batchSources=if(unique.size<=200)unique else emptyList()
+        batchStatus=if(unique.size>200)"Too many files selected: maximum 200. No files were queued; select a smaller batch." else null
     }
     val batchFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
         if(tree!=null && batchSources.isNotEmpty() && !batchBusy)batchJob=scope.launch {
