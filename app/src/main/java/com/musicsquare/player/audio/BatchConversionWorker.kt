@@ -55,6 +55,7 @@ class BatchConversionWorker(context:Context,params:WorkerParameters):CoroutineWo
                 coroutineContext.ensureActive()
                 setProgress(Data.Builder().putInt(KEY_INDEX,index).putInt(KEY_TOTAL,total).build())
             }
+            ConversionHistory(applicationContext).add(format,summary.completed,summary.failed)
             val output=Data.Builder().putInt(KEY_DONE,summary.completed)
                 .putInt(KEY_FAILED,summary.failed)
                 .putString(KEY_ERROR,summary.errors.take(3).joinToString("; "))
