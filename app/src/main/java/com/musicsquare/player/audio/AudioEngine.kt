@@ -131,13 +131,7 @@ class AudioEngine(private val context:Context) {
      coroutineContext.ensureActive()
      context.contentResolver.openInputStream(source)?.use { stream ->
       input.outputStream().use { target ->
-       val buffer=ByteArray(64*1024)
-       while(true) {
-        coroutineContext.ensureActive()
-        val count=stream.read(buffer)
-        if(count<0)break
-        if(count>0)target.write(buffer,0,count)
-       }
+       AudioFileSafety.copyBounded(stream,target) { coroutineContext.ensureActive() }
       }
      } ?: error("Cannot open source")
      val command=mutableListOf("-hide_banner","-loglevel","error","-y","-i",input.absolutePath)
@@ -206,18 +200,15 @@ class AudioEngine(private val context:Context) {
       "FFmpeg error: ${session.allLogsAsString.takeLast(600)}"
      }
      require(output.length()>0) { "Empty output" }
+     require(output.length()<=AudioFileSafety.MAX_OUTPUT_BYTES) { "Converted output exceeds size limit" }
      coroutineContext.ensureActive()
      if(tags!=null && sameDocument(source,destination)) {
       replaceAndVerify(destination,output,input)
      } else {
       context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
        output.inputStream().use { inputStream ->
-        val buffer=ByteArray(64*1024)
-        while(true) {
+        AudioFileSafety.copyBounded(inputStream,stream,AudioFileSafety.MAX_OUTPUT_BYTES) {
          coroutineContext.ensureActive()
-         val count=inputStream.read(buffer)
-         if(count<0)break
-         if(count>0)stream.write(buffer,0,count)
         }
        }
        stream.flush()
@@ -225,21 +216,10 @@ class AudioEngine(private val context:Context) {
       // Stream the provider read-back directly into a digest: no second
       // temporary copy of potentially multi-gigabyte converted audio.
       val expected=digest(output)
-      val actual=MessageDigest.getInstance("SHA-256")
-      var bytesRead=0L
-      context.contentResolver.openInputStream(destination)?.use { stream ->
-       val chunk=ByteArray(64*1024)
-       while(true) {
-        coroutineContext.ensureActive()
-        val n=stream.read(chunk)
-        if(n<0)break
-        if(n>0) {
-         actual.update(chunk,0,n)
-         bytesRead+=n
-        }
-       }
+      val (bytesRead,actual)=context.contentResolver.openInputStream(destination)?.use { stream ->
+       AudioFileSafety.sha256(stream) { coroutineContext.ensureActive() }
       } ?: error("Cannot verify output document")
-      check(bytesRead==output.length() && expected.contentEquals(actual.digest())) {
+      check(bytesRead==output.length() && expected.contentEquals(actual)) {
        "Output verification failed; destination may be incomplete"
       }
      }
