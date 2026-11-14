@@ -91,10 +91,11 @@ class TagEditor(private val context:Context) {
   }
   val source=File.createTempFile("tag_source_",".mp3",context.cacheDir)
   val modified=File.createTempFile("tag_modified_",".mp3",context.cacheDir)
+  val jobContext=coroutineContext
   try {
    context.contentResolver.openInputStream(uri)?.use { input ->
     source.outputStream().use { output ->
-     AudioFileSafety.copyBounded(input,output) { coroutineContext.ensureActive() }
+     AudioFileSafety.copyBounded(input,output) { jobContext.ensureActive() }
     }
    } ?: return TagResult(uri,false,"Cannot read source")
    val mp3=Mp3File(source)
@@ -132,7 +133,7 @@ class TagEditor(private val context:Context) {
     writeExact(uri,modified)
     val expected=sha256(modified)
     val (bytes,actual)=context.contentResolver.openInputStream(uri)?.use { stream ->
-     AudioFileSafety.sha256(stream) { coroutineContext.ensureActive() }
+     AudioFileSafety.sha256(stream) { jobContext.ensureActive() }
     } ?: error("Cannot verify document after saving")
     check(bytes==modified.length() && actual.contentEquals(expected)) {
      "Document read-back did not match"
