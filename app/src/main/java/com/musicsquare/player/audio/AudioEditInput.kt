@@ -30,7 +30,7 @@ object AudioEditInput {
             require(until == null || a < until) { "Cut range starts after the end time" }
             a to b
         }
-        require(cuts.size <= 32)
+        require(cuts.size <= 32) { "Maximum 32 cut ranges" }
         val sorted=cuts.sortedBy { it.first }
         require(sorted.zipWithNext().all { (a,b) -> a.second<=b.first }) { "Cut ranges cannot overlap" }
         if(sourceDurationSeconds!=null) {
@@ -45,7 +45,7 @@ object AudioEditInput {
             }
             val removed=inside.sumOf { it.second-it.first }
             require(removed<selectionEnd-from-0.001) { "Cuts would remove the entire selection" }
-        } { "Maximum 32 cut ranges" }
+        }
         require(speed.isFinite() && speed in 0.25..4.0) { "Speed must be between 0.25× and 4×" }
         val silenceSeconds = if(removeSilence) {
             val value = silence.trim().toDoubleOrNull() ?: error("Invalid silence duration")
