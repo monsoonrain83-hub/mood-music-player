@@ -1,6 +1,9 @@
 package com.musicsquare.player.playback
 
 import android.app.PendingIntent
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -15,6 +18,30 @@ import com.musicsquare.player.widgets.MusicWidgetProvider
 
 class MusicPlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
+    private val timerHandler=Handler(Looper.getMainLooper())
+    private var timerRunnable:Runnable?=null
+    private var timerPreferences:SharedPreferences?=null
+    private var timerListener:SharedPreferences.OnSharedPreferenceChangeListener?=null
+    private fun scheduleSleepTimer(player:Player) {
+        timerRunnable?.let { timerHandler.removeCallbacks(it) }
+        timerRunnable=null
+        val prefs=timerPreferences ?: return
+        val deadline=prefs.getLong("deadline_elapsed",0L)
+        if(deadline<=0L)return
+        val remaining=deadline-SystemClock.elapsedRealtime()
+        if(remaining<=0L) {
+            player.pause()
+            prefs.edit().remove("deadline_elapsed").apply()
+            return
+        }
+        val action=Runnable {
+            player.pause()
+            prefs.edit().remove("deadline_elapsed").apply()
+        }
+        timerRunnable=action
+        timerHandler.postDelayed(action,remaining)
+    }
+
     private val equalizer = EqualizerManager()
     private val playbackFailurePolicy = PlaybackFailurePolicy()
     private var preferences: SharedPreferences? = null
@@ -26,6 +53,13 @@ class MusicPlaybackService : MediaSessionService() {
             setHandleAudioBecomingNoisy(true)
             repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
         }
+        val sleepPrefs=getSharedPreferences("sleep_timer",MODE_PRIVATE)
+        timerPreferences=sleepPrefs
+        timerListener=SharedPreferences.OnSharedPreferenceChangeListener { _,key ->
+            if(key=="deadline_elapsed")scheduleSleepTimer(player)
+        }
+        sleepPrefs.registerOnSharedPreferenceChangeListener(timerListener)
+        scheduleSleepTimer(player)
         val prefs = getSharedPreferences("equalizer", MODE_PRIVATE)
         preferences = prefs
         fun updateEffects() {
@@ -77,6 +111,9 @@ class MusicPlaybackService : MediaSessionService() {
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
     override fun onDestroy() {
+        timerRunnable?.let { timerHandler.removeCallbacks(it) }
+        timerRunnable=null
+        timerPreferences?.let { prefs -> timerListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) } }
         preferences?.let { p -> preferenceListener?.let { p.unregisterOnSharedPreferenceChangeListener(it) } }
         runCatching { equalizer.release() }
         session?.let { active ->
