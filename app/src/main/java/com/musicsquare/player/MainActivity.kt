@@ -743,6 +743,8 @@ private fun PlayerApp(controller: MediaController?) {
                                 analysisJob=scope.launch {
                                     analysisProgress="Starting offline analysis"
                                     var successes=0
+                                    var assigned=0
+                                    var unreadable=0
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
@@ -762,12 +764,15 @@ private fun PlayerApp(controller: MediaController?) {
                                                     if(inferredCell!=null) {
                                                         store.assign(song.id,inferredCell)
                                                         assignmentsVersion++
+                                                        assigned++
                                                     }
                                                 }
                                                 successes++
-                                            }
+                                            } else unreadable++
                                         }
                                         analyzed=successes
+                                        analysisProgress="Completed: $assigned new groups, $unreadable unreadable files"
+                                        kotlinx.coroutines.delay(4500)
                                     } finally { analysisProgress=null }
                                 }
                             },modifier=Modifier.fillMaxWidth()) { Text("Analyze and assign supported moods") }
@@ -778,7 +783,7 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }
                         Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
-                        Text("Mood placements without manual training use an approximate tempo/loudness proxy, NOT verified happiness or emotion. Songs without reliable tempo remain unclassified.",color=muted,fontSize=11.sp)
+                        Text("Automatic placements are acoustic listening groups, NOT verified happiness or emotion. If tempo is unavailable, readable songs are grouped by energy in the middle column. Unreadable files remain unclassified.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
                         Spacer(Modifier.height(20.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
