@@ -171,12 +171,15 @@ private fun PlayerApp(controller: MediaController?) {
     var batchStatus by remember { mutableStateOf<String?>(null) }
     var preflightStatus by remember { mutableStateOf<String?>(null) }
     var preflightBusy by remember { mutableStateOf(false) }
+    var preflightPassed by remember { mutableStateOf(false) }
     LaunchedEffect(batchSources) {
         preflightStatus=null
+        preflightPassed=false
         if(batchSources.isNotEmpty()) {
             preflightBusy=true
             try {
                 val report=batchPreflight.inspect(batchSources)
+                preflightPassed=report.readable==batchSources.size && report.problems.isEmpty()
                 preflightStatus="${report.readable}/${batchSources.size} readable · ${"%.1f".format(java.util.Locale.US,report.totalBytes/1048576.0)} MB known input · ${report.unknownSizes} unknown sizes" +
                     report.problems.take(2).joinToString(separator="; ",prefix=if(report.problems.isEmpty())"" else " · Issues: ")
             } catch(e:kotlinx.coroutines.CancellationException) { throw e }
@@ -1249,7 +1252,7 @@ private fun PlayerApp(controller: MediaController?) {
                             Text("${batchSources.size} files selected",color=muted)
                             if(preflightBusy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
                             preflightStatus?.let { Text(it,color=muted,fontSize=12.sp) }
-                            Button(enabled=batchSources.isNotEmpty() && !batchBusy && !converterBusy,onClick={batchFolderPicker.launch(null)}) {
+                            Button(enabled=batchSources.isNotEmpty() && preflightPassed && !preflightBusy && !batchBusy && !converterBusy,onClick={batchFolderPicker.launch(null)}) {
                                 Text(if(batchBusy)"Converting batch..." else "Choose output folder and convert")
                             }
                             if(batchBusy) {
