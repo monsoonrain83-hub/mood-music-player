@@ -93,6 +93,7 @@ class TagEditor(private val context:Context) {
   val modified=File.createTempFile("tag_modified_",".mp3",context.cacheDir)
   val jobContext=coroutineContext
   try {
+   val operationContext=coroutineContext
    context.contentResolver.openInputStream(uri)?.use { input ->
     source.outputStream().use { output ->
      AudioFileSafety.copyBounded(input,output) { jobContext.ensureActive() }
