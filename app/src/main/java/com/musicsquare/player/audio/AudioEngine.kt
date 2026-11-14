@@ -3,7 +3,6 @@ package com.musicsquare.player.audio
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -195,7 +194,8 @@ class AudioEngine(private val context:Context) {
      if(tags==null)command+="-vn"
      command+=output.absolutePath
      // FFmpegKit argument API avoids shell escaping and injection.
-     val session=FFmpegKit.executeWithArguments(command.toTypedArray())
+     val session=CancellableFfmpeg.execute(command.toTypedArray())
+     coroutineContext.ensureActive()
      require(ReturnCode.isSuccess(session.returnCode)) {
       "FFmpeg error: ${session.allLogsAsString.takeLast(600)}"
      }
