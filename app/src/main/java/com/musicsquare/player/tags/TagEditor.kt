@@ -43,10 +43,14 @@ class TagEditor(private val context:Context) {
  suspend fun writeBatch(uris:List<Uri>,changes:TagChanges,onProgress:(Int,Int)->Unit={ _, _ -> }):List<TagResult> =
   withContext(Dispatchers.IO) {
    require(uris.size in 1..200) { "Select 1–200 files for batch tagging" }
-   uris.distinct().mapIndexed { index,uri ->
+   val valid=TagInputValidator.validate(changes).getOrElse { error ->
+    return@withContext uris.distinct().map { TagResult(it,false,error.message ?: "Invalid metadata") }
+   }
+   val unique=uris.distinct()
+   unique.mapIndexed { index,uri ->
     coroutineContext.ensureActive()
-    val result=writeOne(uri,changes)
-    withContext(Dispatchers.Main) { onProgress(index+1,uris.distinct().size) }
+    val result=writeOne(uri,valid)
+    withContext(Dispatchers.Main) { onProgress(index+1,unique.size) }
     result
    }
   }
