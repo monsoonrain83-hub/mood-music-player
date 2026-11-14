@@ -15,6 +15,7 @@ import java.io.FileOutputStream
 import java.security.MessageDigest
 import android.provider.OpenableColumns
 import com.musicsquare.player.audio.AudioEngine
+import com.musicsquare.player.audio.AudioFileSafety
 
 data class TagChanges(
  val title:String?=null,
@@ -92,7 +93,9 @@ class TagEditor(private val context:Context) {
   val modified=File.createTempFile("tag_modified_",".mp3",context.cacheDir)
   try {
    context.contentResolver.openInputStream(uri)?.use { input ->
-    source.outputStream().use { input.copyTo(it) }
+    source.outputStream().use { output ->
+     AudioFileSafety.copyBounded(input,output) { coroutineContext.ensureActive() }
+    }
    } ?: return TagResult(uri,false,"Cannot read source")
    val mp3=Mp3File(source)
    val tag:ID3v2=mp3.id3v2Tag ?: ID3v24Tag()
@@ -118,6 +121,8 @@ class TagEditor(private val context:Context) {
    if(fields.any { (requested,actual) -> requested!=null && requested!=actual })
     return TagResult(uri,false,"Generated tags failed verification; original untouched")
    if(modified.length()<=0L) return TagResult(uri,false,"Empty generated MP3")
+   if(modified.length()>AudioFileSafety.MAX_OUTPUT_BYTES)
+    return TagResult(uri,false,"Generated MP3 exceeds safe output size")
    // SAF writes are not universally atomic. Keep the original in a private
    // temporary file until the replacement has been verified on the provider.
    var replacementStarted=false
@@ -125,17 +130,10 @@ class TagEditor(private val context:Context) {
     replacementStarted=true
     writeExact(uri,modified)
     val expected=sha256(modified)
-    val actual=MessageDigest.getInstance("SHA-256")
-    var bytes=0L
-    context.contentResolver.openInputStream(uri)?.use { stream ->
-     val chunk=ByteArray(64*1024)
-     while(true) {
-      val n=stream.read(chunk)
-      if(n<0)break
-      if(n>0) { actual.update(chunk,0,n); bytes+=n }
-     }
+    val (bytes,actual)=context.contentResolver.openInputStream(uri)?.use { stream ->
+     AudioFileSafety.sha256(stream) { coroutineContext.ensureActive() }
     } ?: error("Cannot verify document after saving")
-    check(bytes==modified.length() && actual.digest().contentEquals(expected)) {
+    check(bytes==modified.length() && actual.contentEquals(expected)) {
      "Document read-back did not match"
     }
    } catch(writeError:Exception) {
