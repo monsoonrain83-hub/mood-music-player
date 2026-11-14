@@ -1012,6 +1012,39 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(8.dp))
                         Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=ink,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
+                        OutlinedButton(enabled=current!=null && !tagBusy,onClick={
+                            current?.let { song ->
+                                selectedTagUris=listOf(song.uri)
+                                tagTitle=song.title
+                                tagArtist=song.artist
+                                tagAlbum=song.album
+                                tagYear=""
+                                tagGenre=""
+                                tagTrack=""
+                                tagComment=""
+                                tagStatus="Editing currently playing track. Writing may require granting access through Select audio files."
+                                studioPage="Tag Editor"
+                                screen="Tools"
+                                scope.launch {
+                                    tagReadBusy=true
+                                    try {
+                                        val tags=tagInspector.read(song.uri)
+                                        tagTitle=tags.title ?: song.title
+                                        tagArtist=tags.artist ?: song.artist
+                                        tagAlbum=tags.album ?: song.album
+                                        tagYear=tags.year.orEmpty()
+                                        tagGenre=tags.genre.orEmpty()
+                                        tagTrack=tags.track.orEmpty()
+                                    } catch(e:Exception) {
+                                        tagStatus="Could not read embedded tags: ${e.message}. Select the original file if editing fails."
+                                    } finally { tagReadBusy=false }
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Default.Edit,contentDescription="Edit current song tags")
+                            Spacer(Modifier.width(6.dp))
+                            Text("Edit current song tags")
+                        }
                         Spacer(Modifier.height(10.dp))
                         if(lyricsVisible) {
                             Surface(color=surface,shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth().clickable { lyricsExpanded=!lyricsExpanded }) {
