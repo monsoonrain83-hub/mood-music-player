@@ -79,6 +79,7 @@ import com.musicsquare.player.data.MoodStore
 import com.musicsquare.player.data.scanLocalMusic
 import com.musicsquare.player.playback.MusicPlaybackService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 private fun normalizeLibraryText(text: String): String =
     java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC)
@@ -137,6 +138,23 @@ private fun PlayerApp(controller: MediaController?) {
     var backupStatus by remember { mutableStateOf<String?>(null) }
     var playlistRename by remember { mutableStateOf("") }
     var restoredQueue by remember { mutableStateOf(false) }
+    var sleepDeadline by remember { mutableLongStateOf(0L) }
+    var sleepRemaining by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(sleepDeadline,controller) {
+        if(sleepDeadline>0L) {
+            while(sleepDeadline>0L) {
+                val remaining=(sleepDeadline-android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                sleepRemaining=remaining
+                if(remaining==0L) {
+                    controller?.pause()
+                    sleepDeadline=0L
+                    break
+                }
+                delay(minOf(1000L,remaining))
+            }
+        } else sleepRemaining=0L
+    }
+
     val tagEditor = remember { TagEditor(context) }
     val wavEditor = remember { WavEditor(context) }
     val audioEngine = remember { AudioEngine(context) }
@@ -1060,6 +1078,25 @@ private fun PlayerApp(controller: MediaController?) {
                             }) { Icon(Icons.Default.Share,"Share",tint=ink) }
                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
+                            var sleepMenuExpanded by remember { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick={sleepMenuExpanded=true}) {
+                                    Icon(Icons.Default.Bedtime,contentDescription="Sleep timer",tint=if(sleepDeadline>0L)accent else muted)
+                                    Text(if(sleepDeadline>0L)"${(sleepRemaining+59999L)/60000L}m" else "Timer",fontSize=11.sp,color=ink)
+                                }
+                                DropdownMenu(expanded=sleepMenuExpanded,onDismissRequest={sleepMenuExpanded=false}) {
+                                    listOf(5,10,15,30,45,60,90,120).forEach { minutes ->
+                                        DropdownMenuItem(text={Text("$minutes minutes")},onClick={
+                                            sleepDeadline=android.os.SystemClock.elapsedRealtime()+minutes*60_000L
+                                            sleepMenuExpanded=false
+                                        })
+                                    }
+                                    if(sleepDeadline>0L)DropdownMenuItem(text={Text("Cancel timer")},onClick={
+                                        sleepDeadline=0L
+                                        sleepMenuExpanded=false
+                                    })
+                                }
+                            }
                             IconButton(onClick={shuffleOn=!shuffleOn;controller?.shuffleModeEnabled=shuffleOn}) {
                                 Icon(Icons.Default.Shuffle,contentDescription="Shuffle",tint=if(shuffleOn)accent else muted)
                             }
