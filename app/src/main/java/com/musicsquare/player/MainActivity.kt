@@ -138,7 +138,8 @@ private fun PlayerApp(controller: MediaController?) {
     var backupStatus by remember { mutableStateOf<String?>(null) }
     var playlistRename by remember { mutableStateOf("") }
     var restoredQueue by remember { mutableStateOf(false) }
-    var sleepDeadline by remember { mutableLongStateOf(0L) }
+    val sleepPrefs=remember { context.getSharedPreferences("sleep_timer",android.content.Context.MODE_PRIVATE) }
+    var sleepDeadline by remember { mutableLongStateOf(sleepPrefs.getLong("deadline_elapsed",0L)) }
     var sleepRemaining by remember { mutableLongStateOf(0L) }
     LaunchedEffect(sleepDeadline,controller) {
         if(sleepDeadline>0L) {
@@ -146,7 +147,7 @@ private fun PlayerApp(controller: MediaController?) {
                 val remaining=(sleepDeadline-android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
                 sleepRemaining=remaining
                 if(remaining==0L) {
-                    controller?.pause()
+                    sleepPrefs.edit().remove("deadline_elapsed").apply()
                     sleepDeadline=0L
                     break
                 }
@@ -1088,11 +1089,13 @@ private fun PlayerApp(controller: MediaController?) {
                                     listOf(5,10,15,30,45,60,90,120).forEach { minutes ->
                                         DropdownMenuItem(text={Text("$minutes minutes")},onClick={
                                             sleepDeadline=android.os.SystemClock.elapsedRealtime()+minutes*60_000L
+                                            sleepPrefs.edit().putLong("deadline_elapsed",sleepDeadline).apply()
                                             sleepMenuExpanded=false
                                         })
                                     }
                                     if(sleepDeadline>0L)DropdownMenuItem(text={Text("Cancel timer")},onClick={
                                         sleepDeadline=0L
+                                        sleepPrefs.edit().remove("deadline_elapsed").apply()
                                         sleepMenuExpanded=false
                                     })
                                 }
