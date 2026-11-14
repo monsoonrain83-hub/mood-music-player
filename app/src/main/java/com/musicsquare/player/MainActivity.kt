@@ -41,6 +41,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.musicsquare.player.audio.AcousticMoodEstimate
 import com.musicsquare.player.audio.OfflineAudioAnalyzer
 import com.musicsquare.player.ml.PersonalMoodModel
 import com.musicsquare.player.ml.MoodTrainingStore
@@ -735,7 +736,7 @@ private fun PlayerApp(controller: MediaController?) {
                     "Square" -> {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=ink)
-                        Text("Energy →   •   Happiness ↑",color=muted,fontSize=13.sp)
+                        Text("Energy →   •   Estimated mood ↑",color=muted,fontSize=13.sp)
                          Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
                         Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
                             onClick={
@@ -755,7 +756,7 @@ private fun PlayerApp(controller: MediaController?) {
                                                     val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
                                                     // Never fabricate neutral valence: abstain unless a
                                                     // supervised prediction or actual valence is available.
-                                                    val inferredCell=prediction?.cell ?: result.valence?.let { value ->
+                                                    val inferredCell=prediction?.cell ?: (result.valence ?: AcousticMoodEstimate.estimate(result))?.let { value ->
                                                         MoodCoordinates.cell(value,result.energy.coerceIn(0f,1f))
                                                     }
                                                     if(inferredCell!=null) {
@@ -777,7 +778,7 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }
                         Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
-                        Text("Local supervised nearest-neighbour learning, not a pretrained emotion detector. Unsupported songs remain neutral.",color=muted,fontSize=11.sp)
+                        Text("Mood placements without manual training use an approximate tempo/loudness proxy, NOT verified happiness or emotion. Songs without reliable tempo remain unclassified.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
                         Spacer(Modifier.height(20.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
