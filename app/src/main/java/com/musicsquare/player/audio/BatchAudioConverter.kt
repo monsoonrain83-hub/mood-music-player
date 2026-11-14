@@ -38,7 +38,7 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
         sources:List<Uri>, tree:Uri, format:AudioEngine.Format, bitrate:Int,
         progress:suspend (Int,Int)->Unit = { _,_-> }
     ):Summary = withContext(Dispatchers.IO) {
-        require(sources.isNotEmpty() && sources.size<=200) { "Select 1–200 files" }
+        BatchSourcePolicy.checkSelection(sources.size,sources.distinct().size)
         val root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
         val uniqueSources=sources.distinct()
         val usedNames=mutableSetOf<String>()
@@ -63,9 +63,22 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
                     if(cursor.moveToFirst())cursor.getString(0) else null
                 }
             }.getOrNull() ?: "audio_${index+1}"
-            val candidate=OutputNamePlanner.reserve(displayName,index,format.ext,usedNames)
             var destination:Uri?=null
             try {
+                // The picker-time preflight is only advisory: SAF access can change.
+                // Recheck each source before creating an output document.
+                val size=context.contentResolver.query(source,arrayOf(OpenableColumns.SIZE),null,null,null)?.use { cursor ->
+                    val column=cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if(column>=0 && cursor.moveToFirst() && !cursor.isNull(column))
+                        cursor.getLong(column) else null
+                }
+                BatchSourcePolicy.checkKnownSize(size)
+                context.contentResolver.openInputStream(source)?.use { input ->
+                    coroutineContext.ensureActive()
+                    require(input.read()>=0) { "Source file is empty" }
+                } ?: error("Source is no longer readable")
+                coroutineContext.ensureActive()
+                val candidate=OutputNamePlanner.reserve(displayName,index,format.ext,usedNames)
                 destination=DocumentsContract.createDocument(
                     context.contentResolver,root,format.mime,candidate
                 ) ?: error("Cannot create destination document")
