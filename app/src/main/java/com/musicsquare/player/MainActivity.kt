@@ -297,8 +297,6 @@ private fun PlayerApp(controller: MediaController?) {
     var playing by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
-    var sleepMinutes by remember { mutableIntStateOf(0) }
-    var sleepRemaining by remember { mutableLongStateOf(0L) }
     var shuffleOn by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
     var repeatFolder by remember { mutableStateOf(false) }
@@ -544,17 +542,6 @@ private fun PlayerApp(controller: MediaController?) {
             val ids=(0 until player.mediaItemCount).mapNotNull { player.getMediaItemAt(it).mediaId.toLongOrNull() }
             if(ids.isNotEmpty())queueStore.save(ids,player.currentMediaItemIndex,player.currentPosition,player.shuffleModeEnabled,player.repeatMode)
         }
-    }
-    LaunchedEffect(sleepMinutes) {
-        if(sleepMinutes>0) {
-            sleepRemaining=sleepMinutes*60L
-            while(sleepRemaining>0L) {
-                kotlinx.coroutines.delay(1000)
-                sleepRemaining--
-            }
-            controller?.pause()
-            sleepMinutes=0
-        } else sleepRemaining=0
     }
     LaunchedEffect(current?.id,lyricsSearchVersion,onlineLyricsEnabled) {
         val song=current
@@ -1144,10 +1131,14 @@ private fun PlayerApp(controller: MediaController?) {
                         Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
                             Text("Sleep timer",color=muted)
                             listOf(0,15,30,45,60).forEach { min ->
-                                FilterChip(selected=sleepMinutes==min,onClick={sleepMinutes=min},label={Text(if(min==0)"Off" else "${min}m")})
+                                FilterChip(selected=if(min==0)sleepDeadline==0L else sleepDeadline>0L && (sleepRemaining+59999L)/60000L<=min && (sleepRemaining+59999L)/60000L>min-15,onClick={
+                                    sleepDeadline=if(min==0)0L else android.os.SystemClock.elapsedRealtime()+min*60_000L
+                                    if(min==0)sleepPrefs.edit().remove("deadline_elapsed").apply()
+                                    else sleepPrefs.edit().putLong("deadline_elapsed",sleepDeadline).apply()
+                                },label={Text(if(min==0)"Off" else "${min}m")})
                             }
                         }
-                        if(sleepRemaining>0)Text("Stopping in ${sleepRemaining/60}m ${sleepRemaining%60}s",color=muted,fontSize=12.sp)
+                        if(sleepRemaining>0)Text("Stopping in ${sleepRemaining/60000}m ${(sleepRemaining/1000)%60}s",color=muted,fontSize=12.sp)
                         TextButton(onClick={queueExpanded=!queueExpanded}) { Text(if(queueExpanded)"Hide play queue" else "Show play queue") }
                         if(queueExpanded && controller!=null) {
                             Text("${controller.mediaItemCount} tracks in queue",color=muted,fontSize=12.sp)
