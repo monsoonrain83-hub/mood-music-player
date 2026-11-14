@@ -124,13 +124,14 @@ class AudioEngine(private val context:Context) {
     require(edit.removeRanges.all { it.first.isFinite() && it.second.isFinite() && it.first>=0 && it.second>it.first })
     require(edit.removeRanges.all { edit.endSeconds==null || it.first<edit.endSeconds })
     require(edit.silenceSeconds==null || (edit.silenceSeconds.isFinite() && edit.silenceSeconds in 0.25..30.0))
+    val jobContext=coroutineContext
     val input=File.createTempFile("audio_input_",".tmp",context.cacheDir)
     val output=File.createTempFile("audio_output_",".${format.ext}",context.cacheDir)
     try {
      coroutineContext.ensureActive()
      context.contentResolver.openInputStream(source)?.use { stream ->
       input.outputStream().use { target ->
-       AudioFileSafety.copyBounded(stream,target) { coroutineContext.ensureActive() }
+       AudioFileSafety.copyBounded(stream,target) { jobContext.ensureActive() }
       }
      } ?: error("Cannot open source")
      val command=mutableListOf("-hide_banner","-loglevel","error","-y","-i",input.absolutePath)
@@ -208,7 +209,7 @@ class AudioEngine(private val context:Context) {
       context.contentResolver.openOutputStream(destination,"wt")?.use { stream ->
        output.inputStream().use { inputStream ->
         AudioFileSafety.copyBounded(inputStream,stream,AudioFileSafety.MAX_OUTPUT_BYTES) {
-         coroutineContext.ensureActive()
+         jobContext.ensureActive()
         }
        }
        stream.flush()
@@ -217,7 +218,7 @@ class AudioEngine(private val context:Context) {
       // temporary copy of potentially multi-gigabyte converted audio.
       val expected=digest(output)
       val (bytesRead,actual)=context.contentResolver.openInputStream(destination)?.use { stream ->
-       AudioFileSafety.sha256(stream) { coroutineContext.ensureActive() }
+       AudioFileSafety.sha256(stream) { jobContext.ensureActive() }
       } ?: error("Cannot verify output document")
       check(bytesRead==output.length() && expected.contentEquals(actual)) {
        "Output verification failed; destination may be incomplete"
