@@ -127,6 +127,7 @@ class TagEditor(private val context:Context) {
    // temporary file until the replacement has been verified on the provider.
    var replacementStarted=false
    try {
+    coroutineContext.ensureActive()
     replacementStarted=true
     writeExact(uri,modified)
     val expected=sha256(modified)
@@ -145,6 +146,7 @@ class TagEditor(private val context:Context) {
        "Save failed and automatic restore failed: ${writeError.message}; ${restoreError.message}. Check original document immediately.")
      }
     }
+    if(writeError is CancellationException)throw writeError
     return TagResult(uri,false,"Save failed; original bytes restored: ${writeError.message}")
    }
    return TagResult(uri,true,"Original MP3 updated and byte-for-byte verified")
