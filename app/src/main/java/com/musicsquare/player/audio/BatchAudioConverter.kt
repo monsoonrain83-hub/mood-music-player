@@ -49,6 +49,13 @@ class BatchAudioConverter(private val context:Context,private val engine:AudioEn
                 destination=DocumentsContract.createDocument(
                     context.contentResolver,root,format.mime,candidate
                 ) ?: error("Cannot create destination document")
+                require(destination!=source) { "Provider returned the source as output" }
+                val createdName=context.contentResolver.query(destination,arrayOf(COLUMN_DISPLAY_NAME),null,null,null)?.use { cursor ->
+                    if(cursor.moveToFirst())cursor.getString(0) else null
+                }
+                require(createdName==candidate) {
+                    "Provider changed output name; refusing ambiguous destination"
+                }
                 engine.convert(source,destination,format,bitrate).getOrThrow()
                 completed++
             } catch(cancelled:CancellationException) {
