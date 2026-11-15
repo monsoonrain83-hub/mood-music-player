@@ -778,6 +778,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     var successes=0
                                     var assigned=0
                                     var unreadable=0
+                                    var classifiedAlready=0
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
@@ -800,11 +801,12 @@ private fun PlayerApp(controller: MediaController?) {
                                                         assigned++
                                                     }
                                                 }
+                                                else classifiedAlready++
                                                 successes++
                                             } else unreadable++
                                         }
                                         analyzed=successes
-                                        analysisProgress="Completed: $assigned new groups, $unreadable unreadable files"
+                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped, $unreadable decode failures. $successes readable."
                                         kotlinx.coroutines.delay(4500)
                                     } finally { analysisProgress=null }
                                 }
