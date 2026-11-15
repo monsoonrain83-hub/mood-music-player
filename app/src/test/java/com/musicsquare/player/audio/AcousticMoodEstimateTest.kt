@@ -15,6 +15,11 @@ class AcousticMoodEstimateTest {
         assertNotNull(value)
         assertTrue(value!! in 0.15f..0.85f)
     }
+    @Test fun abstainsOnInvalidConfidence() {
+        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(0.6f,120f,Float.NaN)))
+        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(0.6f,120f,-0.1f)))
+        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(0.6f,null,1.2f)))
+    }
     @Test fun abstainsOnInvalidEnergy() {
         assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(Float.NaN,120f,0.4f)))
     }
