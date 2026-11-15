@@ -4,11 +4,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AcousticMoodEstimateTest {
-    @Test fun abstainsWithoutTempo() {
-        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(0.5f,null,0.9f)))
+    @Test fun groupsByEnergyWithoutTempo() {
+        assertEquals(0.5f,AcousticMoodEstimate.estimate(AudioAnalysis(0.5f,null,0.9f))!!,0.0001f)
     }
-    @Test fun abstainsOnLowConfidence() {
-        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(0.5f,120f,0.05f)))
+    @Test fun groupsByEnergyOnLowTempoConfidence() {
+        assertEquals(0.5f,AcousticMoodEstimate.estimate(AudioAnalysis(0.5f,120f,0.05f))!!,0.0001f)
     }
     @Test fun estimatesForReliableTempo() {
         val value=AcousticMoodEstimate.estimate(AudioAnalysis(0.7f,130f,0.4f))
