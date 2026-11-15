@@ -814,9 +814,14 @@ private fun PlayerApp(controller: MediaController?) {
                                                     val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
                                                     // Never fabricate neutral valence: abstain unless a
                                                     // supervised prediction or actual valence is available.
-                                                    val inferredCell=prediction?.cell ?: (result.valence ?: AcousticMoodEstimate.estimate(result))?.let { value ->
-                                                        MoodCoordinates.cell(value,result.energy.coerceIn(0f,1f))
-                                                    }
+                                                    // Reject corrupt cached analysis instead of passing NaN
+                                                    // into MoodCoordinates.cell (which throws on non-finite input).
+                                                    val inferredCell = if (result.energy.isFinite() && result.energy in 0f..1f) {
+                                                        prediction?.cell ?: (result.valence?.takeIf { it.isFinite() && it in 0f..1f }
+                                                            ?: AcousticMoodEstimate.estimate(result))?.let { value ->
+                                                            MoodCoordinates.cell(value, result.energy)
+                                                        }
+                                                    } else null
                                                     if(inferredCell!=null) {
                                                         store.assign(song.id,inferredCell)
                                                         assignmentsVersion++
