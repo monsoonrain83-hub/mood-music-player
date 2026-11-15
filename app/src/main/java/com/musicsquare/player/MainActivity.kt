@@ -798,11 +798,13 @@ private fun PlayerApp(controller: MediaController?) {
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
+                                            // Yield on every track, including skipped ones, so cancellation
+                                            // remains responsive during large cached libraries.
+                                            kotlinx.coroutines.yield()
                                             if (store.cell(song.id) != null) {
                                                 classifiedAlready++
                                                 return@forEachIndexed
                                             }
-                                            kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
                                             analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
                                             val result=analysisStore.read(song.id,song.duration)
                                                 ?: analyzer.analyze(song.uri)?.also { analysisStore.save(song.id,song.duration,it) }
