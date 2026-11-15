@@ -745,6 +745,17 @@ private fun PlayerApp(controller: MediaController?) {
                             Spacer(Modifier.width(8.dp))
                             Text("Browse your library")
                         }
+                        val unclassifiedCount=songs.count { store.cell(it.id)==null }
+                        if(unclassifiedCount>0) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("$unclassifiedCount songs need acoustic grouping",color=accent,fontWeight=FontWeight.SemiBold)
+                            Text("Scanning finds songs; offline analysis assigns them to the mood grid. This estimates listening vibe, not verified emotion.",color=muted,fontSize=12.sp)
+                            Button(onClick={screen="Square"},modifier=Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.GridView,null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Analyze music for mood grid")
+                            }
+                        }
                         OutlinedButton(onClick={screen="Square"},modifier=Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.GridView,null)
                             Spacer(Modifier.width(8.dp))
@@ -842,6 +853,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
+                                            if(store.cell(song.id)!=null) return@forEachIndexed
                                             kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
                                             analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
                                             val result=analysisStore.read(song.id,song.duration)
@@ -870,7 +882,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         kotlinx.coroutines.delay(4500)
                                     } finally { analysisProgress=null }
                                 }
-                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze and assign supported moods") }
+                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
                         analysisProgress?.let { progress ->
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
