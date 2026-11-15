@@ -636,7 +636,7 @@ private fun PlayerApp(controller: MediaController?) {
                             Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=ink)
                             Text(song.artist,fontSize=12.sp,color=muted,maxLines=1)
                         }
-                        IconButton(enabled=!tagBusy,onClick={openCurrentSongTags}) {
+                        IconButton(enabled=!tagBusy,onClick=editCurrentSongTags) {
                             Icon(Icons.Default.Edit,"Edit playing song tags",tint=accent)
                         }
                         IconButton(onClick={controller?.seekToPreviousMediaItem()}) {
