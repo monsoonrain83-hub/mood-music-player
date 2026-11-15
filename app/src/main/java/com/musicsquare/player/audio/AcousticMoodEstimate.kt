@@ -7,12 +7,16 @@ package com.musicsquare.player.audio
  */
 object AcousticMoodEstimate {
     fun estimate(analysis: AudioAnalysis): Float? {
-        if (!analysis.energy.isFinite() || analysis.energy !in 0f..1f ||
-            !analysis.confidence.isFinite() || analysis.confidence !in 0f..1f) return null
-        val bpm=analysis.bpm
-        if (bpm == null || !bpm.isFinite() || bpm !in 60f..200f || analysis.confidence < 0.18f) {
+        // Energy is the minimum usable signal. A broken tempo-confidence value
+        // should disable BPM-based placement, not discard a readable song.
+        if (!analysis.energy.isFinite() || analysis.energy !in 0f..1f) return null
+        val bpm = analysis.bpm
+        val confidence = analysis.confidence
+        if (bpm == null || !bpm.isFinite() || bpm !in 60f..200f ||
+            !confidence.isFinite() || confidence !in 0f..1f || confidence < 0.18f) {
             return 0.5f
         }
-        return (0.50f + (bpm-120f)/400f + (analysis.energy-0.5f)*0.20f).coerceIn(0.15f,0.85f)
+        return (0.50f + (bpm - 120f) / 400f + (analysis.energy - 0.5f) * 0.20f)
+            .coerceIn(0.15f, 0.85f)
     }
 }
