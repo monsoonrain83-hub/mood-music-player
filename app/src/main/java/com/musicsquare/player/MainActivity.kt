@@ -624,63 +624,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }
                             }
-    val editCurrentSongTags: () -> Unit = {openCurrentSongTags}) {
-                            Icon(Icons.Default.Edit,contentDescription="Edit current song tags")
-                            Spacer(Modifier.width(6.dp))
-                            Text("Edit current song tags")
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        if(lyricsVisible) {
-                            Surface(color=surface,shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth().clickable { lyricsExpanded=!lyricsExpanded }) {
-                                Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    val line=lyrics?.currentLine((position+lyricsOffset).coerceAtLeast(0L))
-                                    Text(line ?: if(lyricsLoading)"Searching lyrics..." else if(lyrics?.plain!=null)"Lyrics available — tap to read" else "Lyrics not available",color=ink,maxLines=if(lyricsExpanded)Int.MAX_VALUE else 1,overflow=TextOverflow.Ellipsis)
-                                    if(lyricsExpanded) {
-                                        val content=lyrics?.plain ?: lyrics?.lines?.joinToString("\n") { it.text } ?: "No lyrics found"
-                                        Text(content,color=muted,fontSize=13.sp,modifier=Modifier.heightIn(max=180.dp).verticalScroll(rememberScrollState()))
-                                        Text(lyrics?.source ?: "",color=accent,fontSize=11.sp)
-                                        Row(verticalAlignment=Alignment.CenterVertically) {
-                                            TextButton(onClick={current?.let { song -> lyricsOffset=(lyricsOffset-500L).coerceAtLeast(-15000L);lyricsRepository.setOffsetMs(song.title,song.artist,song.duration,lyricsOffset) }}) { Text("−0.5s") }
-                                            Text("Sync ${lyricsOffset/1000.0}s",color=muted,fontSize=12.sp)
-                                            TextButton(onClick={current?.let { song -> lyricsOffset=(lyricsOffset+500L).coerceAtMost(15000L);lyricsRepository.setOffsetMs(song.title,song.artist,song.duration,lyricsOffset) }}) { Text("+0.5s") }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Row(Modifier.horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
-                            TextButton(onClick={lyricsVisible=!lyricsVisible}) { Text(if(lyricsVisible)"Hide lyrics" else "Show lyrics") }
-                            TextButton(onClick={lrcPicker.launch(arrayOf("text/*","application/octet-stream"))}) { Text("Import LRC") }
-                             TextButton(onClick={lyricsSearchVersion++}) { Text("Find synced lyrics") }
-                            TextButton(onClick={current?.let { song ->
-                                val query=java.net.URLEncoder.encode("${song.artist} ${song.title} lyrics متن آهنگ","UTF-8")
-                                val url=Uri.parse("https://www.google.com/search?q=$query")
-                                context.startActivity(Intent(Intent.ACTION_VIEW,url))
-                            }}) { Text("Web lyrics") }
-                            TextButton(onClick={lrcSaver.launch("${current?.title ?: "lyrics"}.lrc")}) { Text("Save lyrics") }
-                            TextButton(onClick={dancerVisible=!dancerVisible}) { Text(if(dancerVisible)"Hide dancer" else "Dance") }
-                        }
-                        lyricsMessage?.let { Text(it,color=muted,fontSize=12.sp) }
-                        Spacer(Modifier.height(8.dp))
-                        val duration=(controller?.duration ?: 0L).coerceAtLeast(0L)
-                        Slider(value=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f,
-                            onValueChange={fraction -> controller?.seekTo((fraction*duration).toLong());position=(fraction*duration).toLong()},enabled=duration>0)
-                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                             Text("${position/60000}:%02d".format((position/1000)%60),color=muted,fontSize=12.sp)
-                             Text("${duration/60000}:%02d".format((duration/1000)%60),color=muted,fontSize=12.sp)
-                         }
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                            IconButton(onClick={controller?.seekToPreviousMediaItem()}) { Icon(Icons.Default.SkipPrevious,"Previous",tint=ink) }
-                            FilledIconButton(onClick={if(playing)controller?.pause() else controller?.play()},modifier=Modifier.size(68.dp)) {
-                                Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,"Play or pause")
-                            }
-                            IconButton(onClick={controller?.seekToNextMediaItem()}) { Icon(Icons.Default.SkipNext,"Next",tint=ink) }
-                            IconButton(onClick={
-                                current?.let { song ->
-                                    val intent=Intent(Intent.ACTION_SEND).apply { type="audio/*"; putExtra(Intent.EXTRA_STREAM,song.uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);clipData=android.content.ClipData.newUri(context.contentResolver,song.title,song.uri) }
-                                    context.startActivity(Intent.createChooser(intent,"Share song"))
-                                }
-        }
+    val editCurrentSongTags: () -> Unit = { openCurrentSongTags() }
     MaterialTheme(colorScheme = darkColorScheme(primary=accent,background=bg,surface=surface)) {
         Scaffold(containerColor=bg, bottomBar={
             Column {
