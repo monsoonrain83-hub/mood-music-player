@@ -1,0 +1,64 @@
+name: Continuous quality monitor
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: continuous-quality-monitor
+  cancel-in-progress: false
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Security and regression tests
+        id: security
+        continue-on-error: true
+        run: |
+          python3 tools/security_audit.py
+          python3 -m unittest discover -s tools/tests -v
+      - name: Unit tests and debug build
+        id: build
+        continue-on-error: true
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+      - name: Publish successful debug APK
+        if: steps.security.outcome == 'success' && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicSquare-monitored-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error
+      - name: Open or update failure tracking issue
+        if: steps.security.outcome != 'success' || steps.build.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SECURITY_RESULT: ${{ steps.security.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="[automation] Quality gate failures"
+          body=$(printf 'Automated quality check failed.\n\nSecurity/regression: %s\nUnit/build: %s\nLogs: %s\n\nA coding agent must be explicitly configured and authorized to propose repairs. No automatic edits to main are permitted.\n' "$SECURITY_RESULT" "$BUILD_RESULT" "$RUN_URL")
+          issue=$(gh issue list --state open --search "$title in:title" --json number,title --jq '.[] | select(.title == "[automation] Quality gate failures") | .number' | head -n1)
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+      - name: Fail workflow when gates fail
+        if: steps.security.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
