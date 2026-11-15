@@ -797,7 +797,10 @@ private fun PlayerApp(controller: MediaController?) {
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
-                                            if(store.cell(song.id)!=null) return@forEachIndexed
+                                            if (store.cell(song.id) != null) {
+                                                classifiedAlready++
+                                                return@forEachIndexed
+                                            }
                                             kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
                                             analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
                                             val result=analysisStore.read(song.id,song.duration)
@@ -817,12 +820,11 @@ private fun PlayerApp(controller: MediaController?) {
                                                         assigned++
                                                     }
                                                 }
-                                                else classifiedAlready++
                                                 successes++
                                             } else unreadable++
                                         }
                                         analyzed=successes
-                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped, $unreadable decode failures. $successes readable."
+                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $unreadable decode failures. $successes readable analyzed."
                                         kotlinx.coroutines.delay(4500)
                                     } finally { analysisProgress=null }
                                 }
