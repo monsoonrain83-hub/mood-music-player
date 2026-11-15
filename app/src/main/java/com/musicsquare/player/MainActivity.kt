@@ -793,6 +793,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     var successes=0
                                     var assigned=0
                                     var unreadable=0
+                                    var readableUnclassified=0
                                     var classifiedAlready=0
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
@@ -818,13 +819,15 @@ private fun PlayerApp(controller: MediaController?) {
                                                         store.assign(song.id,inferredCell)
                                                         assignmentsVersion++
                                                         assigned++
+                                                    } else {
+                                                        readableUnclassified++
                                                     }
                                                 }
                                                 successes++
                                             } else unreadable++
                                         }
                                         analyzed=successes
-                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $unreadable decode failures. $successes readable analyzed."
+                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable analyzed."
                                         kotlinx.coroutines.delay(4500)
                                     } finally { analysisProgress=null }
                                 }
