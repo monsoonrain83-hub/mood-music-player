@@ -7,7 +7,8 @@ package com.musicsquare.player.audio
  */
 object AcousticMoodEstimate {
     fun estimate(analysis: AudioAnalysis): Float? {
-        if (!analysis.energy.isFinite() || analysis.energy !in 0f..1f) return null
+        if (!analysis.energy.isFinite() || analysis.energy !in 0f..1f ||
+            !analysis.confidence.isFinite() || analysis.confidence !in 0f..1f) return null
         val bpm=analysis.bpm
         if (bpm == null || !bpm.isFinite() || bpm !in 60f..200f || analysis.confidence < 0.18f) {
             return 0.5f
