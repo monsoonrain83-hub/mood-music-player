@@ -1,0 +1,5 @@
+# Professional audio export safety QA
+
+This phase implements preflight enumeration of existing SAF destination folder filenames, case-insensitive collision avoidance across existing files and the batch, safe fallback naming, strict extension validation, and JUnit tests for name planning. Batch export now fails closed when existing filenames cannot be listed, rather than potentially overwriting an existing document. The Cutter exposes bitrate controls for lossy output; lossless output bitrate chips are disabled in Converter. WAV waveform nested read helpers use a captured coroutine context for cooperative cancellation.
+
+Test on real SAF providers: Downloads, SD card, Google Drive, duplicate names with differing case, folder containing thousands of files, folder enumeration failure, providers that auto-rename, providers that return existing URIs on createDocument, storage full, cancellation and activity recreation. An enumerated directory is not an atomic reservation: external concurrent writers can still race, and providers may rename created documents. A truly transactional SAF export needs a provider-specific protocol or verified unique document creation.
