@@ -836,7 +836,7 @@ private fun PlayerApp(controller: MediaController?) {
                                                     // Reject corrupt cached analysis instead of passing NaN
                                                     // into MoodCoordinates.cell (which throws on non-finite input).
                                                     val inferredCell = if (result.energy.isFinite() && result.energy in 0f..1f) {
-                                                        prediction?.cell ?: (result.valence?.takeIf { it.isFinite() && it in 0f..1f }
+                                                        prediction?.cell?.takeIf { it in 0..24 } ?: (result.valence?.takeIf { it.isFinite() && it in 0f..1f }
                                                             ?: AcousticMoodEstimate.estimate(result))?.let { value ->
                                                             MoodCoordinates.cell(value, result.energy)
                                                         }
