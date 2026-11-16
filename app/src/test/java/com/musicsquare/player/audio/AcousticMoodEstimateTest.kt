@@ -16,12 +16,19 @@ class AcousticMoodEstimateTest {
         assertTrue(value!! in 0.15f..0.85f)
     }
     @Test fun fallsBackToEnergyOnInvalidTempoConfidence() {
-        for (confidence in listOf(Float.NaN, Float.POSITIVE_INFINITY, -0.1f, 1.2f)) {
+        for (confidence in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, -0.1f, 1.2f)) {
             assertEquals(0.5f, AcousticMoodEstimate.estimate(AudioAnalysis(0.6f, 120f, confidence))!!, 0.0001f)
         }
     }
+    @Test fun usesTempoAtConfidenceThreshold() {
+        val result = AcousticMoodEstimate.estimate(AudioAnalysis(0.6f, 160f, 0.18f))
+        assertNotNull(result)
+        assertTrue(result!! > 0.5f)
+    }
     @Test fun abstainsOnInvalidEnergy() {
         assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(Float.NaN, 120f, 0.4f)))
+        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(Float.POSITIVE_INFINITY, 120f, 0.4f)))
+        assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(Float.NEGATIVE_INFINITY, 120f, 0.4f)))
         assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(-0.1f, 120f, 0.4f)))
         assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(1.1f, 120f, 0.4f)))
     }
