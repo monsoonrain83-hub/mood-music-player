@@ -648,9 +648,6 @@ private fun PlayerApp(controller: MediaController?) {
                         IconButton(onClick={controller?.seekToNextMediaItem()}) {
                             Icon(Icons.Default.SkipNext,"Next track",tint=ink)
                         }
-                        IconButton(enabled=!tagBusy,onClick=editCurrentSongTags) {
-                            Icon(Icons.Default.Edit,"Edit playing song tags",tint=accent)
-                        }
                     }
                     val miniDuration=(controller?.duration ?: 0L).coerceAtLeast(0L)
                     LinearProgressIndicator(
