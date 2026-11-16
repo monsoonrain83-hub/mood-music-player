@@ -999,9 +999,21 @@ private fun PlayerApp(controller: MediaController?) {
                                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                                         analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
                                         if (analysisStore.read(song.id,song.duration)==null) {
-                                            analyzer.analyze(song.uri)?.let {
-                                                analysisStore.save(song.id,song.duration,it)
-                                                analyzed++
+                                            // Library feature scans must not block Compose or abort
+                                            // the batch when one audio file cannot decode.
+                                            try {
+                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                    analyzer.analyze(song.uri)?.let { features ->
+                                                        if (features.energy.isFinite() && features.energy in 0f..1f) {
+                                                            analysisStore.save(song.id,song.duration,features)
+                                                            analyzed++
+                                                        }
+                                                    }
+                                                }
+                                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                throw cancelled
+                                            } catch (error: Exception) {
+                                                android.util.Log.w("MusicSquareMood", "Library feature scan failed for track ${song.id}", error)
                                             }
                                         }
                                     }
