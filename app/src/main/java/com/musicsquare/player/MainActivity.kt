@@ -806,8 +806,21 @@ private fun PlayerApp(controller: MediaController?) {
                                                 return@forEachIndexed
                                             }
                                             analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
-                                            val result=analysisStore.read(song.id,song.duration)
-                                                ?: analyzer.analyze(song.uri)?.also { analysisStore.save(song.id,song.duration,it) }
+                                            // A corrupt cached energy value must not permanently
+                                            // strand a readable track in the unclassified bucket.
+                                            // Retry decoding once and replace the cache only when
+                                            // the fresh analysis contains usable energy.
+                                            val cached = analysisStore.read(song.id, song.duration)
+                                            val result = if (cached != null && cached.energy.isFinite() &&
+                                                cached.energy in 0f..1f) {
+                                                cached
+                                            } else {
+                                                analyzer.analyze(song.uri)?.also { fresh ->
+                                                    if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
+                                                        analysisStore.save(song.id, song.duration, fresh)
+                                                    }
+                                                }
+                                            }
                                             if(result!=null) {
                                                 if(store.cell(song.id)==null) {
                                                     // User-trained supervised model abstains when evidence is insufficient.
