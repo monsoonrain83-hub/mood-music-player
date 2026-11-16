@@ -815,9 +815,14 @@ private fun PlayerApp(controller: MediaController?) {
                                                 // One unreadable or malformed media file must not abort
                                                 // the remaining library. Preserve coroutine cancellation.
                                                 try {
-                                                    analyzer.analyze(song.uri)?.also { fresh ->
-                                                        if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
-                                                            analysisStore.save(song.id, song.duration, fresh)
+                                                    // Decoding can block for seconds on large or damaged files.
+                                                    // Keep it off Compose's main thread so playback and Cancel
+                                                    // controls remain responsive throughout a library scan.
+                                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                        analyzer.analyze(song.uri)?.also { fresh ->
+                                                            if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
+                                                                analysisStore.save(song.id, song.duration, fresh)
+                                                            }
                                                         }
                                                     }
                                                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
