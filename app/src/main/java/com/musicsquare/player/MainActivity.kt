@@ -686,7 +686,7 @@ private fun PlayerApp(controller: MediaController?) {
                             Spacer(Modifier.width(8.dp))
                             Text("Browse your library")
                         }
-                        val unclassifiedCount=songs.count { store.cell(it.id)==null }
+                        val unclassifiedCount=songs.count { store.cell(it.id) !in 0..24 }
                         if(unclassifiedCount>0) {
                             Spacer(Modifier.height(8.dp))
                             Text("$unclassifiedCount songs need acoustic grouping",color=accent,fontWeight=FontWeight.SemiBold)
@@ -782,7 +782,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=ink)
                         Text("Energy →   •   Estimated mood ↑",color=muted,fontSize=13.sp)
-                         Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
+                         Text("${songs.size} scanned • ${songs.count { store.cell(it.id) in 0..24 } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
                         Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
                             onClick={
                                 analysisJob=scope.launch {
@@ -798,7 +798,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             // Yield on every track, including skipped ones, so cancellation
                                             // remains responsive during large cached libraries.
                                             kotlinx.coroutines.yield()
-                                            if (store.cell(song.id) != null) {
+                                            if (store.cell(song.id) in 0..24) {
                                                 classifiedAlready++
                                                 return@forEachIndexed
                                             }
@@ -828,7 +828,7 @@ private fun PlayerApp(controller: MediaController?) {
                                                 }
                                             }
                                             if(result!=null) {
-                                                if(store.cell(song.id)==null) {
+                                                if(store.cell(song.id) !in 0..24) {
                                                     // User-trained supervised model abstains when evidence is insufficient.
                                                     val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
                                                     // Never fabricate neutral valence: abstain unless a
