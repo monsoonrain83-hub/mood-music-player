@@ -285,6 +285,7 @@ private fun PlayerApp(controller: MediaController?) {
     var selectedTagUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var analysisJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var analysisProgress by remember { mutableStateOf<String?>(null) }
+    var moodAnalysisSummary by remember { mutableStateOf<String?>(null) }
     var analyzed by remember { mutableIntStateOf(0) }
     var songs by remember { mutableStateOf<List<LocalSong>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -787,6 +788,7 @@ private fun PlayerApp(controller: MediaController?) {
                             onClick={
                                 analysisJob=scope.launch {
                                     analysisProgress="Starting offline analysis"
+                                    moodAnalysisSummary=null
                                     var successes=0
                                     var assigned=0
                                     var unreadable=0
@@ -858,8 +860,10 @@ private fun PlayerApp(controller: MediaController?) {
                                             } else unreadable++
                                         }
                                         analyzed=successes
-                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable analyzed."
-                                        kotlinx.coroutines.delay(4500)
+                                        moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable analyzed."
+                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                        moodAnalysisSummary="Analysis cancelled. $assigned newly grouped, $classifiedAlready already grouped (skipped), $unreadable decode failures before cancellation."
+                                        throw cancelled
                                     } finally { analysisProgress=null }
                                 }
                             },modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
@@ -869,6 +873,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel") }
                             }
                         }
+                        moodAnalysisSummary?.let { Text(it,color=muted,fontSize=12.sp) }
                         Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
                         Text("Automatic placements are acoustic listening groups, NOT verified happiness or emotion. If tempo is unavailable, readable songs are grouped by energy in the middle column. Unreadable files remain unclassified.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
