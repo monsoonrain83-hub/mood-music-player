@@ -794,6 +794,8 @@ private fun PlayerApp(controller: MediaController?) {
                                     var unreadable=0
                                     var readableUnclassified=0
                                     var classifiedAlready=0
+                                    var reusedCached=0
+                                    var decodedFresh=0
                                     try {
                                         val personalExamples = trainingStore.examples(songs,analysisStore)
                                         songs.forEachIndexed { index,song ->
@@ -801,6 +803,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             // remains responsive during large cached libraries.
                                             kotlinx.coroutines.yield()
                                             if (store.cell(song.id) in 0..24) {
+                                                analysisProgress="Checking ${index+1}/${songs.size}: already grouped"
                                                 classifiedAlready++
                                                 return@forEachIndexed
                                             }
@@ -812,7 +815,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             val cached = analysisStore.read(song.id, song.duration)
                                             val result = if (cached != null && cached.energy.isFinite() &&
                                                 cached.energy in 0f..1f) {
-                                                cached
+                                                cached.also { reusedCached++ }
                                             } else {
                                                 // One unreadable or malformed media file must not abort
                                                 // the remaining library. Preserve coroutine cancellation.
@@ -822,6 +825,7 @@ private fun PlayerApp(controller: MediaController?) {
                                                     // controls remain responsive throughout a library scan.
                                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                                         analyzer.analyze(song.uri)?.also { fresh ->
+                                                            decodedFresh++
                                                             if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
                                                                 analysisStore.save(song.id, song.duration, fresh)
                                                             }
@@ -860,7 +864,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             } else unreadable++
                                         }
                                         analyzed=successes
-                                        moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable analyzed."
+                                        moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
                                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
                                         moodAnalysisSummary="Analysis cancelled. $assigned newly grouped, $classifiedAlready already grouped (skipped), $unreadable decode failures before cancellation."
                                         throw cancelled
