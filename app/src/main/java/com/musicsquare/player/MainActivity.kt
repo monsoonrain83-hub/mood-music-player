@@ -862,12 +862,21 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Automatic placements are acoustic listening groups, NOT verified happiness or emotion. If tempo is unavailable, readable songs are grouped by energy in the middle column. Unreadable files remain unclassified.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
                         Spacer(Modifier.height(20.dp))
+                        // Read assignments once per grid refresh instead of querying persistent
+                        // storage 25 times per track on every recomposition.
+                        val moodCounts = remember(songs, assignmentsVersion) {
+                            IntArray(25).also { counts ->
+                                songs.forEach { song ->
+                                    store.cell(song.id)?.takeIf { it in 0..24 }?.let { counts[it]++ }
+                                }
+                            }
+                        }
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             repeat(5) { row ->
                                 Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                                     repeat(5) { col ->
                                         val cell=row*5+col
-                                        val count=songs.count { store.cell(it.id)==cell } + (assignmentsVersion * 0)
+                                        val count=moodCounts[cell]
                                         Column(Modifier.weight(1f).height(58.dp)
                                             .background(palette[(col+row)%5].copy(alpha=if(selectedCell==cell)1f else .72f),RoundedCornerShape(10.dp))
                                             .clickable { selectedCell=cell },horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
