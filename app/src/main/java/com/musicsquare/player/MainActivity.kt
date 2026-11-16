@@ -812,10 +812,19 @@ private fun PlayerApp(controller: MediaController?) {
                                                 cached.energy in 0f..1f) {
                                                 cached
                                             } else {
-                                                analyzer.analyze(song.uri)?.also { fresh ->
-                                                    if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
-                                                        analysisStore.save(song.id, song.duration, fresh)
+                                                // One unreadable or malformed media file must not abort
+                                                // the remaining library. Preserve coroutine cancellation.
+                                                try {
+                                                    analyzer.analyze(song.uri)?.also { fresh ->
+                                                        if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
+                                                            analysisStore.save(song.id, song.duration, fresh)
+                                                        }
                                                     }
+                                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                    throw cancelled
+                                                } catch (error: Exception) {
+                                                    android.util.Log.w("MusicSquareMood", "Analysis failed for track ${song.id}", error)
+                                                    null
                                                 }
                                             }
                                             if(result!=null) {
