@@ -1007,30 +1007,40 @@ private fun PlayerApp(controller: MediaController?) {
                                     for ((index,song) in batch.withIndex()) {
                                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                                         analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
-                                        if (analysisStore.read(song.id,song.duration)==null) {
-                                            // Library feature scans must not block Compose or abort
-                                            // the batch when one audio file cannot decode.
-                                            try {
+                                        // Feature scans should populate the grid, not just cache BPM.
+                                        // Reuse valid cache; decode invalid or missing features on IO.
+                                        try {
+                                            val cached = analysisStore.read(song.id, song.duration)
+                                            val features = if (cached != null && cached.energy.isFinite() && cached.energy in 0f..1f) {
+                                                cached
+                                            } else {
                                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                    analyzer.analyze(song.uri)?.let { features ->
-                                                        if (features.energy.isFinite() && features.energy in 0f..1f) {
-                                                            analysisStore.save(song.id,song.duration,features)
-                                                            analyzed++
-                                                        }
+                                                    analyzer.analyze(song.uri)
+                                                }?.takeIf { it.energy.isFinite() && it.energy in 0f..1f }
+                                                    ?.also { analysisStore.save(song.id, song.duration, it) }
+                                            }
+                                            if (features != null) {
+                                                analyzed++
+                                                if (store.cell(song.id) !in 0..24) {
+                                                    val valence = features.valence?.takeIf { it.isFinite() && it in 0f..1f }
+                                                        ?: AcousticMoodEstimate.estimate(features)
+                                                    valence?.let {
+                                                        store.assign(song.id, MoodCoordinates.cell(it, features.energy))
+                                                        assignmentsVersion++
                                                     }
                                                 }
-                                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                throw cancelled
-                                            } catch (error: Exception) {
-                                                android.util.Log.w("MusicSquareMood", "Library feature scan failed for track ${song.id}", error)
                                             }
+                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                            throw cancelled
+                                        } catch (error: Exception) {
+                                            android.util.Log.w("MusicSquareMood", "Library feature scan failed for track ${song.id}", error)
                                         }
                                     }
                                 } finally {
                                     analysisProgress=null
                                 }
                             }
-                        }) { Text("Analyze BPM + energy offline") }
+                        }) { Text("Analyze audio + group on mood grid") }
                         analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
