@@ -313,9 +313,20 @@ private fun PlayerApp(controller: MediaController?) {
         if (!allowed) return
         scope.launch {
             loading = true
-            try { songs = scanLocalMusic(context); error = null }
-            catch (e: Exception) { error = e.localizedMessage ?: "Unable to scan music" }
-            finally { loading = false }
+            try {
+                // MediaStore queries and genre lookups can be slow on large libraries.
+                // Keep the main thread responsive while scanning local audio.
+                songs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    scanLocalMusic(context)
+                }
+                error = null
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                error = e.localizedMessage ?: "Unable to scan music"
+            } finally {
+                loading = false
+            }
         }
     }
     val tagExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { tagExportSource=it }
