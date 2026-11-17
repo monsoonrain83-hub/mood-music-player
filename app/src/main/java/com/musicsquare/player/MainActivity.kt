@@ -310,15 +310,14 @@ private fun PlayerApp(controller: MediaController?) {
     val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     var allowed by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) }
     fun refresh() {
-        if (!allowed) return
+        // Avoid overlapping MediaStore scans: an older result must not replace
+        // a newer library snapshot when refresh is tapped repeatedly.
+        if (!allowed || loading) return
+        loading = true
         scope.launch {
-            loading = true
             try {
-                // MediaStore queries and genre lookups can be slow on large libraries.
-                // Keep the main thread responsive while scanning local audio.
-                songs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    scanLocalMusic(context)
-                }
+                // scanLocalMusic already switches to Dispatchers.IO internally.
+                songs = scanLocalMusic(context)
                 error = null
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
