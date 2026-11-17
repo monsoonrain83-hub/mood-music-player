@@ -1004,6 +1004,9 @@ private fun PlayerApp(controller: MediaController?) {
                                 analysisProgress="Analyzing local tracks…"
                                 analyzed=0
                                 try {
+                                    // Match the Mood screen's classification priority: learned
+                                    // labels first, then valid valence, then acoustic proxy.
+                                    val personalExamples = trainingStore.examples(batch, analysisStore)
                                     for ((index,song) in batch.withIndex()) {
                                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                                         analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
@@ -1022,10 +1025,16 @@ private fun PlayerApp(controller: MediaController?) {
                                             if (features != null) {
                                                 analyzed++
                                                 if (store.cell(song.id) !in 0..24) {
-                                                    val valence = features.valence?.takeIf { it.isFinite() && it in 0f..1f }
-                                                        ?: AcousticMoodEstimate.estimate(features)
-                                                    valence?.let {
-                                                        store.assign(song.id, MoodCoordinates.cell(it, features.energy))
+                                                    val prediction = PersonalMoodModel.predict(
+                                                        features.energy, features.bpm, personalExamples, song.id
+                                                    )
+                                                    val inferredCell = prediction?.cell?.takeIf { it in 0..24 }
+                                                        ?: (features.valence?.takeIf { it.isFinite() && it in 0f..1f }
+                                                            ?: AcousticMoodEstimate.estimate(features))?.let {
+                                                            MoodCoordinates.cell(it, features.energy)
+                                                        }
+                                                    inferredCell?.let {
+                                                        store.assign(song.id, it)
                                                         assignmentsVersion++
                                                     }
                                                 }
