@@ -21,7 +21,7 @@ class MoodTrainingStore(context: Context) {
     fun examples(songs: List<LocalSong>, analyses: AnalysisStore): List<PersonalMoodModel.Example> =
         songs.mapNotNull { song ->
             val cell = preferences.getInt(song.id.toString(), -1).takeIf { it in 0..24 } ?: return@mapNotNull null
-            val features = analyses.read(song.id, song.duration) ?: return@mapNotNull null
+            val features = analyses.read(song.id, song.modified) ?: return@mapNotNull null
             PersonalMoodModel.Example(song.id, features.energy, features.bpm, cell)
         }
 
