@@ -1059,7 +1059,12 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }
                         }) { Text("Analyze audio + group on mood grid") }
-                        analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
+                        analysisProgress?.let { progress ->
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
+                                TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel analysis") }
+                            }
+                        }
                         if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
