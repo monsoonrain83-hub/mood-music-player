@@ -1108,7 +1108,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(song.title,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                        Text("${song.artist} • ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
+                                        Text("${song.artist} • ${store.cell(song.id)?.takeIf { it in names.indices }?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
                                     }
                                     IconButton(onClick={
                                         val key=song.id.toString()
@@ -1265,7 +1265,7 @@ private fun PlayerApp(controller: MediaController?) {
                             OutlinedTextField(value=manualLyrics,onValueChange={manualLyrics=it},label={Text("Paste or edit lyrics")},modifier=Modifier.fillMaxWidth())
                             TextButton(onClick={current?.let { song -> lyricsRepository.savePlain(song.title,song.artist,song.duration,manualLyrics);lyrics=lyricsRepository.saved(song.title,song.artist,song.duration);lyricsMessage="Lyrics saved offline" }}) { Text("Save manual lyrics") }
                         }
-                        current?.let { song -> Text("Mood: ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",color=muted) }
+                        current?.let { song -> Text("Mood: ${store.cell(song.id)?.takeIf { it in names.indices }?.let { names[it] } ?: "Unclassified"}",color=muted) }
                     }
                     "Tools" -> {
                         Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=ink)
