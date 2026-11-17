@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
 import android.net.Uri
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -70,15 +71,21 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         while(genres.moveToNext()) {
             val id=genres.getLong(gid)
             val name=genres.getString(gname) ?: continue
-            runCatching {
+            try {
                 context.contentResolver.query(MediaStore.Audio.Genres.Members.getContentUri("external",id),
                     arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),null,null,null)?.use { members ->
                     val aid=members.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
                     while(members.moveToNext()) genreMap[members.getLong(aid)]=name
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("MusicSquareLibrary", "Genre members unavailable for genre $id", error)
             }
         }
     }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
     } catch (error: Exception) {
         // Preserve the library when optional genre enrichment fails.
         android.util.Log.w("MusicSquareLibrary", "Genre lookup unavailable", error)
