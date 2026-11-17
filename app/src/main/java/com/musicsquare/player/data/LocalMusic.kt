@@ -16,7 +16,8 @@ data class LocalSong(
     val uri: Uri,
     val folder: String = "Unknown folder",
     val genre: String = "Unknown genre",
-    val year: Int = 0
+    val year: Int = 0,
+    val modified: Long = 0L
 )
 
 suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Dispatchers.IO) {
@@ -26,6 +27,7 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
         MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
         MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.DATE_MODIFIED,
         MediaStore.Audio.Media.DATA,
         MediaStore.Audio.Media.YEAR
     )
@@ -39,6 +41,7 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         val artist = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
         val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
         val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+        val modified = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
         val pathIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
         val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
         while (cursor.moveToNext()) {
@@ -51,7 +54,8 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                 cursor.getLong(duration),
                 ContentUris.withAppendedId(collection, songId),
                 folder = cursor.getString(pathIndex)?.substringBeforeLast('/')?.substringAfterLast('/') ?: "Unknown folder",
-                year = if(cursor.isNull(yearIndex))0 else cursor.getInt(yearIndex)
+                year = if(cursor.isNull(yearIndex))0 else cursor.getInt(yearIndex),
+                modified = if(cursor.isNull(modified)) 0L else cursor.getLong(modified)
             )
         }
     }
