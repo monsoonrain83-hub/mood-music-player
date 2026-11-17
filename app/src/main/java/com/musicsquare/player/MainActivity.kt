@@ -802,6 +802,9 @@ private fun PlayerApp(controller: MediaController?) {
                                             // Yield on every track, including skipped ones, so cancellation
                                             // remains responsive during large cached libraries.
                                             kotlinx.coroutines.yield()
+                                            // Cache reads, classifier predictions and storage can also
+                                            // fail. Keep processing the remaining tracks.
+                                            try {
                                             if (store.cell(song.id) in 0..24) {
                                                 analysisProgress="Checking ${index+1}/${songs.size}: already grouped"
                                                 classifiedAlready++
@@ -862,6 +865,12 @@ private fun PlayerApp(controller: MediaController?) {
                                                 }
                                                 successes++
                                             } else unreadable++
+                                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                throw cancelled
+                                            } catch (error: Exception) {
+                                                unreadable++
+                                                android.util.Log.w("MusicSquareMood", "Mood grouping failed for track ${song.id}", error)
+                                            }
                                         }
                                         analyzed=successes
                                         moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
