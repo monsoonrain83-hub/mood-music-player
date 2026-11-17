@@ -818,7 +818,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             // strand a readable track in the unclassified bucket.
                                             // Retry decoding once and replace the cache only when
                                             // the fresh analysis contains usable energy.
-                                            val cached = analysisStore.read(song.id, song.duration)
+                                            val cached = analysisStore.read(song.id, song.modified)
                                             val result = if (cached != null && cached.energy.isFinite() &&
                                                 cached.energy in 0f..1f) {
                                                 cached.also { reusedCached++ }
@@ -833,7 +833,7 @@ private fun PlayerApp(controller: MediaController?) {
                                                         analyzer.analyze(song.uri)?.also { fresh ->
                                                             decodedFresh++
                                                             if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
-                                                                analysisStore.save(song.id, song.duration, fresh)
+                                                                analysisStore.save(song.id, song.modified, fresh)
                                                             }
                                                         }
                                                     }
@@ -1025,14 +1025,14 @@ private fun PlayerApp(controller: MediaController?) {
                                         // Feature scans should populate the grid, not just cache BPM.
                                         // Reuse valid cache; decode invalid or missing features on IO.
                                         try {
-                                            val cached = analysisStore.read(song.id, song.duration)
+                                            val cached = analysisStore.read(song.id, song.modified)
                                             val features = if (cached != null && cached.energy.isFinite() && cached.energy in 0f..1f) {
                                                 cached
                                             } else {
                                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                                     analyzer.analyze(song.uri)
                                                 }?.takeIf { it.energy.isFinite() && it.energy in 0f..1f }
-                                                    ?.also { analysisStore.save(song.id, song.duration, it) }
+                                                    ?.also { analysisStore.save(song.id, song.modified, it) }
                                             }
                                             if (features != null) {
                                                 analyzed++
@@ -1079,7 +1079,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 "Year" -> selectedGroup=="All" || song.year.toString()==selectedGroup
                                 "Favorites" -> favorites.getBoolean(song.id.toString(),false)
                                 "Energetic","Relaxed","Fast tempo","Unanalyzed" ->
-                                    com.musicsquare.player.data.SmartLibraryFilters.matches(grouping,analysisStore.read(song.id,song.duration))
+                                    com.musicsquare.player.data.SmartLibraryFilters.matches(grouping,analysisStore.read(song.id, song.modified))
                                 "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
                                 else -> true
                             })
@@ -1116,7 +1116,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(song.title,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                        Text("${song.artist} • ${store.cell(song.id)?.takeIf { it in names.indices }?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
+                                        Text("${song.artist} • ${store.cell(song.id)?.takeIf { it in names.indices }?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id, song.modified)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
                                     }
                                     IconButton(onClick={
                                         val key=song.id.toString()
@@ -1606,7 +1606,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }
                     ) {
-                        val danceAnalysis=current?.let { analysisStore.read(it.id,it.duration) }
+                        val danceAnalysis=current?.let { analysisStore.read(it.id,it.modified) }
                         DancingCompanion(
                             playing=playing,
                             onDismiss={dancerVisible=false},
