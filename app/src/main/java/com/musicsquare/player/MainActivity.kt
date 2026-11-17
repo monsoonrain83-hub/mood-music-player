@@ -1065,7 +1065,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel analysis") }
                             }
                         }
-                        if (analyzed>0) Text("$analyzed readable songs • ${songs.count { store.cell(it.id) in 0..24 }} grouped • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
+                        if (songs.isNotEmpty()) Text("${songs.size} scanned • ${songs.count { store.cell(it.id) in 0..24 }} grouped • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
                             (searchQuery.isBlank() || listOf(song.title,song.artist,song.album,song.folder,song.genre).any { normalizeLibraryText(it).contains(normalizeLibraryText(searchQuery)) }) && (searchQuery.isNotBlank() || when(grouping) {
