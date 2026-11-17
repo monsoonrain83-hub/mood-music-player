@@ -60,8 +60,11 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         }
     }
     val genreMap = mutableMapOf<Long,String>()
-    context.contentResolver.query(MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
-        arrayOf(MediaStore.Audio.Genres._ID,MediaStore.Audio.Genres.NAME),null,null,null)?.use { genres ->
+    // Genre metadata is optional. Some providers deny or do not implement this
+    // collection even when the main audio query succeeds. Keep scanned tracks.
+    try {
+        context.contentResolver.query(MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Audio.Genres._ID,MediaStore.Audio.Genres.NAME),null,null,null)?.use { genres ->
         val gid=genres.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
         val gname=genres.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
         while(genres.moveToNext()) {
@@ -75,6 +78,10 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                 }
             }
         }
+    }
+    } catch (error: Exception) {
+        // Preserve the library when optional genre enrichment fails.
+        android.util.Log.w("MusicSquareLibrary", "Genre lookup unavailable", error)
     }
     songs.map { it.copy(genre=genreMap[it.id] ?: "Unknown genre") }
 }
