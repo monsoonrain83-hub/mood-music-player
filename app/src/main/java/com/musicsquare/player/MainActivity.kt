@@ -612,7 +612,10 @@ private fun PlayerApp(controller: MediaController?) {
                                 scope.launch {
                                     tagReadBusy=true
                                     try {
-                                        val tags=tagInspector.read(song.uri)
+                                        // Embedded metadata may require slow document-provider IO. Never block Compose playback controls.
+                                        val tags=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            tagInspector.read(song.uri)
+                                        }
                                         tagTitle=tags.title ?: song.title
                                         tagArtist=tags.artist ?: song.artist
                                         tagAlbum=tags.album ?: song.album
