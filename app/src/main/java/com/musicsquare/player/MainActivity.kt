@@ -856,7 +856,9 @@ private fun PlayerApp(controller: MediaController?) {
                                                     null
                                                 }
                                             }
-                                            if(result!=null) {
+                                            // Reject invalid decoder energy before counting the track as analyzed.
+                                            // Otherwise an unusable result is reported as readable but unclassified.
+                                            if(result != null && result.energy.isFinite() && result.energy in 0f..1f) {
                                                 if(store.cell(song.id) !in 0..24) {
                                                     // User-trained supervised model abstains when evidence is insufficient.
                                                     val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
