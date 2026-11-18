@@ -1022,13 +1022,17 @@ private fun PlayerApp(controller: MediaController?) {
                         if (!allowed) Button(onClick={request.launch(permission)}) { Text("Allow music access") }
                         OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
+                        TextButton(enabled=allowed && analysisProgress==null && songs.any { store.cell(it.id) !in 0..24 },onClick={
                             // Claim the shared analysis slot before launching the coroutine.
                             // Otherwise rapid taps can enqueue multiple library decoders.
                             analysisProgress="Analyzing local tracks…"
+                            moodAnalysisSummary=null
                             analysisJob=scope.launch {
                                 val batch=songs.toList()
                                 analyzed=0
+                                var newlyGrouped=0
+                                var decodeFailures=0
+                                var stillUnclassified=0
                                 try {
                                     // Match the Mood screen's classification priority: learned
                                     // labels first, then valid valence, then acoustic proxy.
@@ -1063,18 +1067,21 @@ private fun PlayerApp(controller: MediaController?) {
                                                             ?: AcousticMoodEstimate.estimate(features))?.let {
                                                             MoodCoordinates.cell(it, features.energy)
                                                         }
-                                                    inferredCell?.let {
-                                                        store.assign(song.id, it)
+                                                    if (inferredCell != null) {
+                                                        store.assign(song.id, inferredCell)
                                                         assignmentsVersion++
-                                                    }
+                                                        newlyGrouped++
+                                                    } else stillUnclassified++
                                                 }
-                                            }
+                                            } else decodeFailures++
                                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                                             throw cancelled
                                         } catch (error: Exception) {
+                                            decodeFailures++
                                             android.util.Log.w("MusicSquareMood", "Library feature scan failed for track ${song.id}", error)
                                         }
                                     }
+                                    moodAnalysisSummary="Library analysis: $newlyGrouped newly grouped, $stillUnclassified readable but unclassified, $decodeFailures decode failures."
                                 } finally {
                                     analysisProgress=null
                                 }
@@ -1087,6 +1094,7 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }
                         if (songs.isNotEmpty()) Text("${songs.size} scanned • ${songs.count { store.cell(it.id) in 0..24 }} grouped • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
+                        moodAnalysisSummary?.let { Text(it,color=muted,fontSize=12.sp) }
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
                             (searchQuery.isBlank() || listOf(song.title,song.artist,song.album,song.folder,song.genre).any { normalizeLibraryText(it).contains(normalizeLibraryText(searchQuery)) }) && (searchQuery.isNotBlank() || when(grouping) {
