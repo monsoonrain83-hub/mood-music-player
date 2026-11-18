@@ -799,9 +799,11 @@ private fun PlayerApp(controller: MediaController?) {
                          Text("${songs.size} scanned • ${songs.count { store.cell(it.id) in 0..24 } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
                         Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
                             onClick={
+                                // Mark the operation busy synchronously: rapid taps must not
+                                // enqueue multiple full-library decoders before launch starts.
+                                analysisProgress="Starting offline analysis"
+                                moodAnalysisSummary=null
                                 analysisJob=scope.launch {
-                                    analysisProgress="Starting offline analysis"
-                                    moodAnalysisSummary=null
                                     var successes=0
                                     var assigned=0
                                     var unreadable=0
