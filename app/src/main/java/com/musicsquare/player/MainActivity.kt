@@ -1023,9 +1023,11 @@ private fun PlayerApp(controller: MediaController?) {
                         OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
+                            // Claim the shared analysis slot before launching the coroutine.
+                            // Otherwise rapid taps can enqueue multiple library decoders.
+                            analysisProgress="Analyzing local tracks…"
                             analysisJob=scope.launch {
                                 val batch=songs.toList()
-                                analysisProgress="Analyzing local tracks…"
                                 analyzed=0
                                 try {
                                     // Match the Mood screen's classification priority: learned
