@@ -797,7 +797,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=ink)
                         Text("Energy →   •   Estimated mood ↑",color=muted,fontSize=13.sp)
                          Text("${songs.size} scanned • ${songs.count { store.cell(it.id) in 0..24 } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
-                        Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
+                        Button(enabled=allowed && songs.any { store.cell(it.id) !in 0..24 } && analysisProgress==null,
                             onClick={
                                 // Mark the operation busy synchronously: rapid taps must not
                                 // enqueue multiple full-library decoders before launch starts.
