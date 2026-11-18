@@ -830,7 +830,9 @@ private fun PlayerApp(controller: MediaController?) {
                                             // strand a readable track in the unclassified bucket.
                                             // Retry decoding once and replace the cache only when
                                             // the fresh analysis contains usable energy.
-                                            val cached = analysisStore.read(song.id, song.modified)
+                                            val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                analysisStore.read(song.id, song.modified)
+                                            }
                                             val result = if (cached != null && cached.energy.isFinite() &&
                                                 cached.energy in 0f..1f) {
                                                 cached.also { reusedCached++ }
@@ -1049,7 +1051,9 @@ private fun PlayerApp(controller: MediaController?) {
                                         // Feature scans should populate the grid, not just cache BPM.
                                         // Reuse valid cache; decode invalid or missing features on IO.
                                         try {
-                                            val cached = analysisStore.read(song.id, song.modified)
+                                            val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                analysisStore.read(song.id, song.modified)
+                                            }
                                             val features = if (cached != null && cached.energy.isFinite() && cached.energy in 0f..1f) {
                                                 cached
                                             } else {
