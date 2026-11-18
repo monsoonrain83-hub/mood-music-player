@@ -1036,6 +1036,10 @@ private fun PlayerApp(controller: MediaController?) {
                                     for ((index,song) in batch.withIndex()) {
                                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                                         analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
+                                        // Already-grouped tracks do not need another decode or cache read.
+                                        // Match the incremental behavior of the Mood screen and
+                                        // preserve existing manual assignments.
+                                        if (store.cell(song.id) in 0..24) continue
                                         // Feature scans should populate the grid, not just cache BPM.
                                         // Reuse valid cache; decode invalid or missing features on IO.
                                         try {
