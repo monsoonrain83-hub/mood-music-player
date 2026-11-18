@@ -87,18 +87,29 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         val gid=genres.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
         val gname=genres.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
         while(genres.moveToNext()) {
-            val id=genres.getLong(gid)
-            val name=genres.getString(gname) ?: continue
+            // Optional metadata must not block the library or swallow cancellation.
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
             try {
-                context.contentResolver.query(MediaStore.Audio.Genres.Members.getContentUri("external",id),
-                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),null,null,null)?.use { members ->
-                    val aid=members.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
-                    while(members.moveToNext()) genreMap[members.getLong(aid)]=name
+                val id = genres.getLong(gid)
+                val name = genres.getString(gname) ?: continue
+                context.contentResolver.query(MediaStore.Audio.Genres.Members.getContentUri("external", id),
+                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID), null, null, null)?.use { members ->
+                    val aid = members.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                    while (members.moveToNext()) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        try {
+                            genreMap[members.getLong(aid)] = name
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            android.util.Log.w("MusicSquareLibrary", "Skipping malformed genre member", error)
+                        }
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                android.util.Log.w("MusicSquareLibrary", "Genre members unavailable for genre $id", error)
+                android.util.Log.w("MusicSquareLibrary", "Skipping unavailable genre metadata", error)
             }
         }
     }
