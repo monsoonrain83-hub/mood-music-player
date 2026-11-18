@@ -8,6 +8,7 @@ import android.os.Build
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 
 data class LocalSong(
     val id: Long,
@@ -50,6 +51,10 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         )
         val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
         while (cursor.moveToNext()) {
+            // A malformed MediaStore row must not discard all previously read songs.
+            // Cancellation is still propagated immediately.
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            try {
             val songId = cursor.getLong(id)
             songs += LocalSong(
                 songId,
@@ -66,6 +71,11 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                 year = if(cursor.isNull(yearIndex))0 else cursor.getInt(yearIndex),
                 modified = if(cursor.isNull(modified)) 0L else cursor.getLong(modified)
             )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("MusicSquareLibrary", "Skipping malformed MediaStore audio row", error)
+            }
         }
     }
     val genreMap = mutableMapOf<Long,String>()
