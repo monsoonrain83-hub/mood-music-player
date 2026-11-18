@@ -812,7 +812,11 @@ private fun PlayerApp(controller: MediaController?) {
                                     var reusedCached=0
                                     var decodedFresh=0
                                     try {
-                                        val personalExamples = trainingStore.examples(songs,analysisStore)
+                                        // Loading training examples may read cached audio features for the entire library.
+                                        // Keep that disk work off the UI thread before starting the scan.
+                                        val personalExamples = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            trainingStore.examples(songs, analysisStore)
+                                        }
                                         songs.forEachIndexed { index,song ->
                                             // Yield on every track, including skipped ones, so cancellation
                                             // remains responsive during large cached libraries.
