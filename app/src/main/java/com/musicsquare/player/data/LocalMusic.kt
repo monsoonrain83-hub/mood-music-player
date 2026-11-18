@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
 import android.net.Uri
+import android.os.Build
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,7 +30,8 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
         MediaStore.Audio.Media.DURATION,
         MediaStore.Audio.Media.DATE_MODIFIED,
-        MediaStore.Audio.Media.DATA,
+        // DATA is deprecated and may be unavailable to scoped-storage apps.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA,
         MediaStore.Audio.Media.YEAR
     )
     context.contentResolver.query(
@@ -43,7 +45,9 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
         val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
         val modified = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
-        val pathIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+        val pathIndex = cursor.getColumnIndexOrThrow(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
+        )
         val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
         while (cursor.moveToNext()) {
             val songId = cursor.getLong(id)
@@ -54,7 +58,11 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                 cursor.getString(album) ?: "Unknown album",
                 cursor.getLong(duration),
                 ContentUris.withAppendedId(collection, songId),
-                folder = cursor.getString(pathIndex)?.substringBeforeLast('/')?.substringAfterLast('/') ?: "Unknown folder",
+                folder = cursor.getString(pathIndex)?.let { path ->
+                    val directory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) path.trimEnd('/')
+                        else path.substringBeforeLast('/', missingDelimiterValue = "")
+                    directory.substringAfterLast('/').ifBlank { "Unknown folder" }
+                } ?: "Unknown folder",
                 year = if(cursor.isNull(yearIndex))0 else cursor.getInt(yearIndex),
                 modified = if(cursor.isNull(modified)) 0L else cursor.getLong(modified)
             )
