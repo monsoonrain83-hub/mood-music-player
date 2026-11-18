@@ -910,7 +910,7 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                         }
                         moodAnalysisSummary?.let { Text(it,color=muted,fontSize=12.sp) }
-                        Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
+                        Text("Personal learning: ${trainingStore.exampleCount()} manual labels. Cached features are checked off the UI thread when analysis starts; at least 5 diverse usable labels are needed.",color=muted,fontSize=11.sp)
                         Text("Automatic placements are acoustic listening groups, NOT verified happiness or emotion. If tempo is unavailable, readable songs are grouped by energy in the middle column. Unreadable files remain unclassified.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
                         Spacer(Modifier.height(20.dp))
