@@ -1127,7 +1127,7 @@ private fun PlayerApp(controller: MediaController?) {
                                                         }
                                                     }
                                             }
-                                            if (features != null) {
+                                            if (features != null && features.energy.isFinite() && features.energy in 0f..1f) {
                                                 analyzed++
                                                 if (store.cell(song.id) !in 0..24) {
                                                     val prediction = PersonalMoodModel.predict(
@@ -1144,7 +1144,11 @@ private fun PlayerApp(controller: MediaController?) {
                                                         newlyGrouped++
                                                     } else stillUnclassified++
                                                 }
-                                            } else decodeFailures++
+                                            } else {
+                                                // Invalid decoder/cache energy is not a usable analysis result.
+                                                // Never pass it to the personal model or grid coordinates.
+                                                decodeFailures++
+                                            }
                                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                                             throw cancelled
                                         } catch (error: Exception) {
