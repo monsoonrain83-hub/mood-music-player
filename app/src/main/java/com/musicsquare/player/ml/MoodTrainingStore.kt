@@ -20,7 +20,13 @@ class MoodTrainingStore(context: Context) {
 
     fun examples(songs: List<LocalSong>, analyses: AnalysisStore): List<PersonalMoodModel.Example> =
         songs.mapNotNull { song ->
-            val cell = preferences.getInt(song.id.toString(), -1).takeIf { it in 0..24 } ?: return@mapNotNull null
+            // A malformed legacy preference must not discard valid training labels.
+            val cell = try {
+                preferences.getInt(song.id.toString(), -1).takeIf { it in 0..24 }
+            } catch (error: ClassCastException) {
+                android.util.Log.w("MusicSquareMood", "Skipping malformed manual label for song ${song.id}", error)
+                null
+            } ?: return@mapNotNull null
             val features = analyses.read(song.id, song.modified) ?: return@mapNotNull null
             // A corrupted cache entry must not poison the personal model for
             // every song in the batch. Keep valid energy-only examples usable.
