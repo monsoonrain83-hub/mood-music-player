@@ -27,7 +27,16 @@ class MoodTrainingStore(context: Context) {
                 android.util.Log.w("MusicSquareMood", "Skipping malformed manual label for song ${song.id}", error)
                 null
             } ?: return@mapNotNull null
-            val features = analyses.read(song.id, song.modified) ?: return@mapNotNull null
+            // One corrupt or unreadable cached analysis must not discard the other
+            // manually labelled examples or abort the entire training batch.
+            val features = try {
+                analyses.read(song.id, song.modified)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("MusicSquareMood", "Skipping unreadable training cache for song ${song.id}", error)
+                null
+            } ?: return@mapNotNull null
             // A corrupted cache entry must not poison the personal model for
             // every song in the batch. Keep valid energy-only examples usable.
             if (!features.energy.isFinite() || features.energy !in 0f..1f) return@mapNotNull null
