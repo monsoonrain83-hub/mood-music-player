@@ -1054,7 +1054,18 @@ private fun PlayerApp(controller: MediaController?) {
                                 try {
                                     // Match the Mood screen's classification priority: learned
                                     // labels first, then valid valence, then acoustic proxy.
-                                    val personalExamples = trainingStore.examples(batch, analysisStore)
+                                    // Training examples may read many cached feature files; keep disk IO off Compose.
+                                    // A damaged training cache must not abort acoustic grouping.
+                                    val personalExamples = try {
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            trainingStore.examples(batch, analysisStore)
+                                        }
+                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        android.util.Log.w("MusicSquareMood", "Library training unavailable; using acoustic fallback", error)
+                                        emptyList()
+                                    }
                                     for ((index,song) in batch.withIndex()) {
                                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                                         analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
@@ -1074,7 +1085,11 @@ private fun PlayerApp(controller: MediaController?) {
                                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                                     analyzer.analyze(song.uri)
                                                 }?.takeIf { it.energy.isFinite() && it.energy in 0f..1f }
-                                                    ?.also { analysisStore.save(song.id, song.modified, it) }
+                                                    ?.also { features ->
+                                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                            analysisStore.save(song.id, song.modified, features)
+                                                        }
+                                                    }
                                             }
                                             if (features != null) {
                                                 analyzed++
