@@ -864,7 +864,16 @@ private fun PlayerApp(controller: MediaController?) {
                                                         analyzer.analyze(song.uri)?.also { fresh ->
                                                             decodedFresh++
                                                             if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
-                                                                analysisStore.save(song.id, song.modified, fresh)
+                                                                // Cache persistence is best-effort: a full or
+                                                                // unwritable cache must not discard decoded audio
+                                                                // and prevent this track from being classified.
+                                                                try {
+                                                                    analysisStore.save(song.id, song.modified, fresh)
+                                                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                                    throw cancelled
+                                                                } catch (error: Exception) {
+                                                                    android.util.Log.w("MusicSquareMood", "Could not cache decoded track ${song.id}; continuing with fresh features", error)
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -1089,8 +1098,16 @@ private fun PlayerApp(controller: MediaController?) {
                                                     analyzer.analyze(song.uri)
                                                 }?.takeIf { it.energy.isFinite() && it.energy in 0f..1f }
                                                     ?.also { features ->
-                                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                            analysisStore.save(song.id, song.modified, features)
+                                                        // A cache write failure must not turn a successful
+                                                        // decode into an unclassified track.
+                                                        try {
+                                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                                analysisStore.save(song.id, song.modified, features)
+                                                            }
+                                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                            throw cancelled
+                                                        } catch (error: Exception) {
+                                                            android.util.Log.w("MusicSquareMood", "Could not cache library track ${song.id}; continuing with fresh features", error)
                                                         }
                                                     }
                                             }
