@@ -22,7 +22,11 @@ class MoodTrainingStore(context: Context) {
         songs.mapNotNull { song ->
             val cell = preferences.getInt(song.id.toString(), -1).takeIf { it in 0..24 } ?: return@mapNotNull null
             val features = analyses.read(song.id, song.modified) ?: return@mapNotNull null
-            PersonalMoodModel.Example(song.id, features.energy, features.bpm, cell)
+            // A corrupted cache entry must not poison the personal model for
+            // every song in the batch. Keep valid energy-only examples usable.
+            if (!features.energy.isFinite() || features.energy !in 0f..1f) return@mapNotNull null
+            val usableBpm = features.bpm?.takeIf { it.isFinite() && it in 60f..200f }
+            PersonalMoodModel.Example(song.id, features.energy, usableBpm, cell)
         }
 
     fun clear() = preferences.edit().clear().apply()
