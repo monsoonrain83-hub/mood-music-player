@@ -814,8 +814,18 @@ private fun PlayerApp(controller: MediaController?) {
                                     try {
                                         // Loading training examples may read cached audio features for the entire library.
                                         // Keep that disk work off the UI thread before starting the scan.
-                                        val personalExamples = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            trainingStore.examples(songs, analysisStore)
+                                        // A malformed training preference or cached feature must not
+                                        // prevent acoustic fallback for the entire music library.
+                                        // Preserve cancellation; only isolate recoverable training errors.
+                                        val personalExamples = try {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                trainingStore.examples(songs, analysisStore)
+                                            }
+                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                            throw cancelled
+                                        } catch (error: Exception) {
+                                            android.util.Log.w("MusicSquareMood", "Personal training unavailable; using acoustic fallback", error)
+                                            emptyList()
                                         }
                                         songs.forEachIndexed { index,song ->
                                             // Yield on every track, including skipped ones, so cancellation
