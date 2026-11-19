@@ -804,6 +804,9 @@ private fun PlayerApp(controller: MediaController?) {
                                 analysisProgress="Starting offline analysis"
                                 moodAnalysisSummary=null
                                 analysisJob=scope.launch {
+                                    // Freeze the target library for this run. A refresh can replace
+                                    // Compose's song list while decoding is in progress.
+                                    val batch = songs.toList()
                                     var successes=0
                                     var assigned=0
                                     var unreadable=0
@@ -819,7 +822,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         // Preserve cancellation; only isolate recoverable training errors.
                                         val personalExamples = try {
                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                trainingStore.examples(songs, analysisStore)
+                                                trainingStore.examples(batch, analysisStore)
                                             }
                                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                                             throw cancelled
@@ -827,7 +830,7 @@ private fun PlayerApp(controller: MediaController?) {
                                             android.util.Log.w("MusicSquareMood", "Personal training unavailable; using acoustic fallback", error)
                                             emptyList()
                                         }
-                                        songs.forEachIndexed { index,song ->
+                                        batch.forEachIndexed { index,song ->
                                             // Yield on every track, including skipped ones, so cancellation
                                             // remains responsive during large cached libraries.
                                             kotlinx.coroutines.yield()
@@ -835,11 +838,11 @@ private fun PlayerApp(controller: MediaController?) {
                                             // fail. Keep processing the remaining tracks.
                                             try {
                                             if (store.cell(song.id) in 0..24) {
-                                                analysisProgress="Checking ${index+1}/${songs.size}: already grouped"
+                                                analysisProgress="Checking ${index+1}/${batch.size}: already grouped"
                                                 classifiedAlready++
                                                 return@forEachIndexed
                                             }
-                                            analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
+                                            analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
                                             // A corrupt cached energy value must not permanently
                                             // strand a readable track in the unclassified bucket.
                                             // Retry decoding once and replace the cache only when
