@@ -124,7 +124,14 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
 
 class MoodStore(context: Context) {
     private val preferences = context.getSharedPreferences("mood_assignments", Context.MODE_PRIVATE)
-    fun cell(id: Long): Int? = preferences.getInt(id.toString(), -1).takeIf { it in 0..24 }
+    fun cell(id: Long): Int? = try {
+        preferences.getInt(id.toString(), -1).takeIf { it in 0..24 }
+    } catch (error: ClassCastException) {
+        // Legacy/corrupt preference types must not crash the grid, library,
+        // or scanning loop. Treat only this track as unclassified.
+        android.util.Log.w("MusicSquareMood", "Invalid saved mood cell for track $id", error)
+        null
+    }
     fun assign(id: Long, cell: Int) {
         require(cell in 0..24)
         preferences.edit().putInt(id.toString(), cell).apply()
