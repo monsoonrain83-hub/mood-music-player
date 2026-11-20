@@ -74,4 +74,23 @@ class MoodStoreInstrumentedTest {
         }
     }
 
+    @Test
+    fun reassigningOneTrackDoesNotChangeAnotherTrack() {
+        val prefs = context.getSharedPreferences("mood_assignments", Context.MODE_PRIVATE)
+        val firstId = -910008L
+        val secondId = -910009L
+        try {
+            prefs.edit().remove(firstId.toString()).remove(secondId.toString()).commit()
+            val store = MoodStore(context)
+            store.assign(firstId, 0)
+            store.assign(secondId, 24)
+            store.assign(firstId, 12)
+            val reopened = MoodStore(context)
+            assertEquals(12, reopened.cell(firstId))
+            assertEquals(24, reopened.cell(secondId))
+        } finally {
+            prefs.edit().remove(firstId.toString()).remove(secondId.toString()).commit()
+        }
+    }
+
 }
