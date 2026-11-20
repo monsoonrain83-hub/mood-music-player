@@ -936,7 +936,7 @@ private fun PlayerApp(controller: MediaController?) {
                                         analyzed=successes
                                         moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
                                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                        moodAnalysisSummary="Analysis cancelled. $assigned newly grouped, $classifiedAlready already grouped (skipped), $unreadable decode failures before cancellation."
+                                        moodAnalysisSummary="Analysis cancelled: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded) before cancellation."
                                         throw cancelled
                                     } finally { analysisProgress=null }
                                 }
