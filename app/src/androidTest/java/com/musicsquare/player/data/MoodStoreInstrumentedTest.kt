@@ -50,4 +50,28 @@ class MoodStoreInstrumentedTest {
             prefs.edit().remove(badId.toString()).remove(goodId.toString()).commit()
         }
     }
+    @Test
+    fun manualAssignmentPersistsAcrossStoreInstancesAndRejectsInvalidCell() {
+        val prefs = context.getSharedPreferences("mood_assignments", Context.MODE_PRIVATE)
+        val id = -910007L
+        try {
+            prefs.edit().remove(id.toString()).commit()
+            val store = MoodStore(context)
+            assertNull(store.cell(id))
+            store.assign(id, 19)
+            // apply() updates the in-memory preferences synchronously; a new
+            // MoodStore must observe the assignment without rescanning audio.
+            assertEquals(19, MoodStore(context).cell(id))
+            try {
+                store.assign(id, 25)
+                org.junit.Assert.fail("Out-of-range mood cell should be rejected")
+            } catch (_: IllegalArgumentException) {
+                // Invalid assignment must not overwrite the valid manual choice.
+            }
+            assertEquals(19, MoodStore(context).cell(id))
+        } finally {
+            prefs.edit().remove(id.toString()).commit()
+        }
+    }
+
 }
