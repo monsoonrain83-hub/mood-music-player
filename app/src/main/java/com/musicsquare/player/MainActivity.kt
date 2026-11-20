@@ -1079,6 +1079,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 var newlyGrouped=0
                                 var decodeFailures=0
                                 var stillUnclassified=0
+                                var alreadyGrouped=0
                                 try {
                                     // Match the Mood screen's classification priority: learned
                                     // labels first, then valid valence, then acoustic proxy.
@@ -1100,7 +1101,10 @@ private fun PlayerApp(controller: MediaController?) {
                                         // Already-grouped tracks do not need another decode or cache read.
                                         // Match the incremental behavior of the Mood screen and
                                         // preserve existing manual assignments.
-                                        if (store.cell(song.id) in 0..24) continue
+                                        if (store.cell(song.id) in 0..24) {
+                                            alreadyGrouped++
+                                            continue
+                                        }
                                         // Feature scans should populate the grid, not just cache BPM.
                                         // Reuse valid cache; decode invalid or missing features on IO.
                                         try {
@@ -1170,9 +1174,9 @@ private fun PlayerApp(controller: MediaController?) {
                                             android.util.Log.w("MusicSquareMood", "Library feature scan failed for track ${song.id}", error)
                                         }
                                     }
-                                    moodAnalysisSummary="Library analysis: $newlyGrouped newly grouped, $stillUnclassified readable but unclassified, $decodeFailures decode failures."
+                                    moodAnalysisSummary="Library analysis: $newlyGrouped newly grouped, $alreadyGrouped already grouped (skipped), $stillUnclassified readable but unclassified, $decodeFailures decode failures."
                                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                    moodAnalysisSummary="Library analysis cancelled: $newlyGrouped newly grouped, $stillUnclassified readable but unclassified, $decodeFailures decode failures before cancellation."
+                                    moodAnalysisSummary="Library analysis cancelled: $newlyGrouped newly grouped, $alreadyGrouped already grouped (skipped), $stillUnclassified readable but unclassified, $decodeFailures decode failures before cancellation."
                                     throw cancelled
                                 } finally {
                                     analysisProgress=null
