@@ -1157,6 +1157,9 @@ private fun PlayerApp(controller: MediaController?) {
                                         }
                                     }
                                     moodAnalysisSummary="Library analysis: $newlyGrouped newly grouped, $stillUnclassified readable but unclassified, $decodeFailures decode failures."
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                    moodAnalysisSummary="Library analysis cancelled: $newlyGrouped newly grouped, $stillUnclassified readable but unclassified, $decodeFailures decode failures before cancellation."
+                                    throw cancelled
                                 } finally {
                                     analysisProgress=null
                                 }
