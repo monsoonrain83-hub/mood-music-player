@@ -1275,7 +1275,16 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(8.dp))
                         Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=ink,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
-                        OutlinedButton(enabled=current!=null && !tagBusy,onClick=editCurrentSongTags) { Icon(Icons.Default.Edit,"Edit tags",tint=ink) }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled=current!=null && !tagBusy,onClick=editCurrentSongTags) {
+                                Icon(Icons.Default.Edit,contentDescription=null,tint=ink)
+                                Text(" Edit song tags")
+                            }
+                            OutlinedButton(enabled=current!=null,onClick={current?.let { assignSong=it }}) {
+                                Icon(Icons.Default.GridView,contentDescription=null,tint=ink)
+                                Text(" Assign mood")
+                            }
+                        }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
                             var sleepMenuExpanded by remember { mutableStateOf(false) }
                             Box {
