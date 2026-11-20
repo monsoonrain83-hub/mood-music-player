@@ -897,7 +897,15 @@ private fun PlayerApp(controller: MediaController?) {
                                             if(result != null && result.energy.isFinite() && result.energy in 0f..1f) {
                                                 if(store.cell(song.id) !in 0..24) {
                                                     // User-trained supervised model abstains when evidence is insufficient.
-                                                    val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
+                                                    val prediction = try {
+                                                        PersonalMoodModel.predict(result.energy, result.bpm, personalExamples, song.id)
+                                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                        throw cancelled
+                                                    } catch (error: Exception) {
+                                                        // A failed optional personal model must not discard decoded audio.
+                                                        android.util.Log.w("MusicSquareMood", "Personal prediction failed for track ${song.id}; using acoustic fallback", error)
+                                                        null
+                                                    }
                                                     // Never fabricate neutral valence: abstain unless a
                                                     // supervised prediction or actual valence is available.
                                                     // Reject corrupt cached analysis instead of passing NaN
@@ -1130,9 +1138,15 @@ private fun PlayerApp(controller: MediaController?) {
                                             if (features != null && features.energy.isFinite() && features.energy in 0f..1f) {
                                                 analyzed++
                                                 if (store.cell(song.id) !in 0..24) {
-                                                    val prediction = PersonalMoodModel.predict(
-                                                        features.energy, features.bpm, personalExamples, song.id
-                                                    )
+                                                    val prediction = try {
+                                                        PersonalMoodModel.predict(features.energy, features.bpm, personalExamples, song.id)
+                                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                        throw cancelled
+                                                    } catch (error: Exception) {
+                                                        // Preserve readable tracks when optional personalised inference fails.
+                                                        android.util.Log.w("MusicSquareMood", "Library personal prediction failed for track ${song.id}; using acoustic fallback", error)
+                                                        null
+                                                    }
                                                     val inferredCell = prediction?.cell?.takeIf { it in 0..24 }
                                                         ?: (features.valence?.takeIf { it.isFinite() && it in 0f..1f }
                                                             ?: AcousticMoodEstimate.estimate(features))?.let {
