@@ -92,6 +92,8 @@ class OfflineAudioAnalyzer(private val context: Context) {
                                 android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
                                 android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
                                 android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
+                                android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+                                android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
                                 else -> 0
                             }
                             if (bytesPerSample > 0) {
@@ -99,6 +101,14 @@ class OfflineAudioAnalyzer(private val context: Context) {
                                     val sample = when (encoding) {
                                         android.media.AudioFormat.ENCODING_PCM_FLOAT -> pcm.float.toDouble()
                                         android.media.AudioFormat.ENCODING_PCM_8BIT -> (pcm.get().toInt() and 0xff).minus(128) / 128.0
+                                        android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
+                                            // Sign-extend little-endian signed 24-bit PCM.
+                                            val low = pcm.get().toInt() and 0xff
+                                            val mid = pcm.get().toInt() and 0xff
+                                            val high = pcm.get().toInt()
+                                            ((high shl 16) or (mid shl 8) or low) / 8388608.0
+                                        }
+                                        android.media.AudioFormat.ENCODING_PCM_32BIT -> pcm.int.toDouble() / 2147483648.0
                                         else -> pcm.short.toDouble() / 32768.0
                                     }
                                     if (!sample.isFinite()) continue
