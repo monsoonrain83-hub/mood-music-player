@@ -31,7 +31,16 @@ class OfflineAudioAnalyzer(private val context: Context) {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            val asset = context.contentResolver.openAssetFileDescriptor(uri, "r")
+            // A provider may support MediaExtractor's URI access while refusing the
+            // AssetFileDescriptor API. Fall back only for unsupported/missing assets;
+            // permission failures must not be masked.
+            val asset = try {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")
+            } catch (_: java.io.FileNotFoundException) {
+                null
+            } catch (_: UnsupportedOperationException) {
+                null
+            }
             if (asset != null) {
                 asset.use { afd ->
                     if (afd.length >= 0) extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
