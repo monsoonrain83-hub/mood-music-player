@@ -31,10 +31,31 @@ class OfflineAudioAnalyzer(private val context: Context) {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-                if (afd.length >= 0) extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                else extractor.setDataSource(afd.fileDescriptor)
-            } ?: return@withContext null
+            // A provider may support MediaExtractor's URI access while refusing the
+            // AssetFileDescriptor API. Fall back only for unsupported/missing assets;
+            // permission failures must not be masked.
+            val asset = try {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")
+            } catch (_: java.io.FileNotFoundException) {
+                null
+            } catch (_: UnsupportedOperationException) {
+                null
+            }
+            if (asset != null) {
+                asset.use { afd ->
+                    if (afd.length >= 0) extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    else {
+                        // Unknown-length provider assets may have a nonzero start offset.
+                        // Let MediaExtractor resolve the content URI rather than using
+                        // the fd-only overload, which would start at byte zero.
+                        extractor.setDataSource(context, uri, null)
+                    }
+                }
+            } else {
+                // Some providers can serve the URI to MediaExtractor but cannot
+                // expose an AssetFileDescriptor. Do not silently skip these tracks.
+                extractor.setDataSource(context, uri, null)
+            }
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: return@withContext null
@@ -54,10 +75,12 @@ class OfflineAudioAnalyzer(private val context: Context) {
             var totalSquared = 0.0
             var totalSamples = 0L
             val envelope = ArrayList<Double>()
-            val windowSamples = (sampleRate / 20).coerceAtLeast(1) // 50 ms
+            var decodedSampleRate = sampleRate
+            var decodedChannels = channels
+            var windowSamples = (decodedSampleRate / 20).coerceAtLeast(1) // 50 ms
             var windowSum = 0.0
             var windowCount = 0
-            val maxSamples = sampleRate.toLong() * 45 * channels
+            var maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
             var loops = 0
             val deadlineMs = android.os.SystemClock.elapsedRealtime() + 90_000L
             while (!outputEnded && totalSamples < maxSamples && loops++ < 100000) {
@@ -92,13 +115,27 @@ class OfflineAudioAnalyzer(private val context: Context) {
                                 android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
                                 android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
                                 android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
+                                android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+                                android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
                                 else -> 0
                             }
+                            // Unsupported decoder output cannot yield usable acoustic features.
+                            // Fail this track immediately rather than spinning until the 90-second
+                            // watchdog and delaying classification of the rest of the library.
+                            if (bytesPerSample == 0) return@withContext null
                             if (bytesPerSample > 0) {
                                 while (pcm.remaining() >= bytesPerSample && totalSamples < maxSamples) {
                                     val sample = when (encoding) {
                                         android.media.AudioFormat.ENCODING_PCM_FLOAT -> pcm.float.toDouble()
                                         android.media.AudioFormat.ENCODING_PCM_8BIT -> (pcm.get().toInt() and 0xff).minus(128) / 128.0
+                                        android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
+                                            // Sign-extend little-endian signed 24-bit PCM.
+                                            val low = pcm.get().toInt() and 0xff
+                                            val mid = pcm.get().toInt() and 0xff
+                                            val high = pcm.get().toInt()
+                                            ((high shl 16) or (mid shl 8) or low) / 8388608.0
+                                        }
+                                        android.media.AudioFormat.ENCODING_PCM_32BIT -> pcm.int.toDouble() / 2147483648.0
                                         else -> pcm.short.toDouble() / 32768.0
                                     }
                                     if (!sample.isFinite()) continue
@@ -107,7 +144,7 @@ class OfflineAudioAnalyzer(private val context: Context) {
                                     windowSum += sq
                                     totalSamples++
                                     windowCount++
-                                    if (windowCount >= windowSamples * channels) {
+                                    if (windowCount >= windowSamples * decodedChannels) {
                                         envelope.add(sqrt(windowSum / windowCount))
                                         windowCount = 0
                                         windowSum = 0.0
@@ -118,10 +155,29 @@ class OfflineAudioAnalyzer(private val context: Context) {
                         decoder.releaseOutputBuffer(index, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputEnded = true
                     }
-                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> Unit
+                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        // The decoder can resample or change channel count. Keep the
+                        // 50-ms envelope and three-second minimum tied to decoded PCM.
+                        val decodedFormat = decoder.outputFormat
+                        decodedSampleRate = decodedFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        decodedChannels = decodedFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+                        if (decodedSampleRate <= 0) return@withContext null
+                        windowSamples = (decodedSampleRate / 20).coerceAtLeast(1)
+                        maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
+                        // Samples decoded under the previous PCM format cannot be
+                        // combined with this format's channel count/sample rate.
+                        // Reset the RMS accumulator as well as the beat envelope;
+                        // otherwise the three-second minimum and loudness can be
+                        // calculated from incompatible audio formats.
+                        totalSamples = 0L
+                        totalSquared = 0.0
+                        envelope.clear()
+                        windowSum = 0.0
+                        windowCount = 0
+                    }
                 }
             }
-            if (totalSamples < sampleRate.toLong() * channels * 3) return@withContext null
+            if (totalSamples < decodedSampleRate.toLong() * decodedChannels * 3) return@withContext null
             val rms = sqrt(totalSquared / totalSamples).toFloat()
             // Energy is a loudness-derived proxy, NOT Spotify's learned energy score.
             val energy = (rms / 0.24f).coerceIn(0f, 1f)
