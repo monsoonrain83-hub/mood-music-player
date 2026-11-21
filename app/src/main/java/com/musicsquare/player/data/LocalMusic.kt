@@ -35,11 +35,16 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA,
         MediaStore.Audio.Media.YEAR
     )
-    context.contentResolver.query(
+    // A null cursor means the provider could not supply a library result. Do
+    // not report this as a successful scan of zero songs: surface the failure
+    // to the existing refresh error UI so the user can distinguish it from
+    // an actually empty music collection.
+    val cursor = context.contentResolver.query(
         collection, columns,
         "${MediaStore.Audio.Media.IS_MUSIC} != 0",
         null, "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
-    )?.use { cursor ->
+    ) ?: throw IllegalStateException("MediaStore audio query returned no cursor")
+    cursor.use { cursor ->
         val id = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
         val title = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
         val artist = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
