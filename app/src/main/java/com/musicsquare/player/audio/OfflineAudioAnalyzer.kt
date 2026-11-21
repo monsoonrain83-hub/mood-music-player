@@ -164,6 +164,13 @@ class OfflineAudioAnalyzer(private val context: Context) {
                         if (decodedSampleRate <= 0) return@withContext null
                         windowSamples = (decodedSampleRate / 20).coerceAtLeast(1)
                         maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
+                        // Samples decoded under the previous PCM format cannot be
+                        // combined with this format's channel count/sample rate.
+                        // Reset the RMS accumulator as well as the beat envelope;
+                        // otherwise the three-second minimum and loudness can be
+                        // calculated from incompatible audio formats.
+                        totalSamples = 0L
+                        totalSquared = 0.0
                         envelope.clear()
                         windowSum = 0.0
                         windowCount = 0
