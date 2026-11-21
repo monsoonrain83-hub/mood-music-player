@@ -43,8 +43,19 @@ class OfflineAudioAnalyzer(private val context: Context) {
             }
             if (asset != null) {
                 asset.use { afd ->
-                    if (afd.length >= 0) extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                    else {
+                    if (afd.length >= 0) {
+                        try {
+                            extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                        } catch (_: java.io.IOException) {
+                            // Some providers expose an asset descriptor but do not support
+                            // seeking through it. Retry via the URI before skipping the track.
+                            extractor.setDataSource(context, uri, null)
+                        } catch (_: IllegalArgumentException) {
+                            // A provider can advertise an unusable descriptor range while
+                            // still serving the original URI to MediaExtractor.
+                            extractor.setDataSource(context, uri, null)
+                        }
+                    } else {
                         // Unknown-length provider assets may have a nonzero start offset.
                         // Let MediaExtractor resolve the content URI rather than using
                         // the fd-only overload, which would start at byte zero.
