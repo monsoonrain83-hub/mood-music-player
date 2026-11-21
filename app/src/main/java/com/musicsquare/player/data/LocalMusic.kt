@@ -50,11 +50,11 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         val artist = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
         val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
         val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-        val modified = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
-        val pathIndex = cursor.getColumnIndexOrThrow(
+        val modified = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
+        val pathIndex = cursor.getColumnIndex(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
         )
-        val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+        val yearIndex = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)
         while (cursor.moveToNext()) {
             // A malformed MediaStore row must not discard all previously read songs.
             // Cancellation is still propagated immediately.
@@ -68,13 +68,13 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                 cursor.getString(album) ?: "Unknown album",
                 cursor.getLong(duration),
                 ContentUris.withAppendedId(collection, songId),
-                folder = cursor.getString(pathIndex)?.let { path ->
+                folder = (if (pathIndex >= 0 && !cursor.isNull(pathIndex)) cursor.getString(pathIndex) else null)?.let { path ->
                     val directory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) path.trimEnd('/')
                         else path.substringBeforeLast('/', missingDelimiterValue = "")
                     directory.substringAfterLast('/').ifBlank { "Unknown folder" }
                 } ?: "Unknown folder",
-                year = if(cursor.isNull(yearIndex))0 else cursor.getInt(yearIndex),
-                modified = if(cursor.isNull(modified)) 0L else cursor.getLong(modified)
+                year = if(yearIndex < 0 || cursor.isNull(yearIndex)) 0 else cursor.getInt(yearIndex),
+                modified = if(modified < 0 || cursor.isNull(modified)) 0L else cursor.getLong(modified)
             )
             } catch (cancelled: CancellationException) {
                 throw cancelled
