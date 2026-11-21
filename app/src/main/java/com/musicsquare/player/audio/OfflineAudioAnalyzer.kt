@@ -117,6 +117,10 @@ class OfflineAudioAnalyzer(private val context: Context) {
                                 android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
                                 else -> 0
                             }
+                            // Unsupported decoder output cannot yield usable acoustic features.
+                            // Fail this track immediately rather than spinning until the 90-second
+                            // watchdog and delaying classification of the rest of the library.
+                            if (bytesPerSample == 0) return@withContext null
                             if (bytesPerSample > 0) {
                                 while (pcm.remaining() >= bytesPerSample && totalSamples < maxSamples) {
                                     val sample = when (encoding) {
