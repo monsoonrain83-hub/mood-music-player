@@ -75,10 +75,12 @@ class OfflineAudioAnalyzer(private val context: Context) {
             var totalSquared = 0.0
             var totalSamples = 0L
             val envelope = ArrayList<Double>()
-            val windowSamples = (sampleRate / 20).coerceAtLeast(1) // 50 ms
+            var decodedSampleRate = sampleRate
+            var decodedChannels = channels
+            var windowSamples = (decodedSampleRate / 20).coerceAtLeast(1) // 50 ms
             var windowSum = 0.0
             var windowCount = 0
-            val maxSamples = sampleRate.toLong() * 45 * channels
+            var maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
             var loops = 0
             val deadlineMs = android.os.SystemClock.elapsedRealtime() + 90_000L
             while (!outputEnded && totalSamples < maxSamples && loops++ < 100000) {
@@ -142,7 +144,7 @@ class OfflineAudioAnalyzer(private val context: Context) {
                                     windowSum += sq
                                     totalSamples++
                                     windowCount++
-                                    if (windowCount >= windowSamples * channels) {
+                                    if (windowCount >= windowSamples * decodedChannels) {
                                         envelope.add(sqrt(windowSum / windowCount))
                                         windowCount = 0
                                         windowSum = 0.0
@@ -153,10 +155,22 @@ class OfflineAudioAnalyzer(private val context: Context) {
                         decoder.releaseOutputBuffer(index, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputEnded = true
                     }
-                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> Unit
+                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        // The decoder can resample or change channel count. Keep the
+                        // 50-ms envelope and three-second minimum tied to decoded PCM.
+                        val decodedFormat = decoder.outputFormat
+                        decodedSampleRate = decodedFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        decodedChannels = decodedFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+                        if (decodedSampleRate <= 0) return@withContext null
+                        windowSamples = (decodedSampleRate / 20).coerceAtLeast(1)
+                        maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
+                        envelope.clear()
+                        windowSum = 0.0
+                        windowCount = 0
+                    }
                 }
             }
-            if (totalSamples < sampleRate.toLong() * channels * 3) return@withContext null
+            if (totalSamples < decodedSampleRate.toLong() * decodedChannels * 3) return@withContext null
             val rms = sqrt(totalSquared / totalSamples).toFloat()
             // Energy is a loudness-derived proxy, NOT Spotify's learned energy score.
             val energy = (rms / 0.24f).coerceIn(0f, 1f)
