@@ -31,16 +31,22 @@ class OfflineAudioAnalyzer(private val context: Context) {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-                if (afd.length >= 0) extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                else {
-                    // Some document/content providers expose an offset but no length.
-                    // The fd-only overload starts at byte zero and can decode the wrong
-                    // data (or fail) when the audio lives inside a larger container.
-                    // The URI overload lets MediaExtractor resolve provider offsets.
-                    extractor.setDataSource(context, uri, null)
+            val asset = context.contentResolver.openAssetFileDescriptor(uri, "r")
+            if (asset != null) {
+                asset.use { afd ->
+                    if (afd.length >= 0) extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    else {
+                        // Unknown-length provider assets may have a nonzero start offset.
+                        // Let MediaExtractor resolve the content URI rather than using
+                        // the fd-only overload, which would start at byte zero.
+                        extractor.setDataSource(context, uri, null)
+                    }
                 }
-            } ?: return@withContext null
+            } else {
+                // Some providers can serve the URI to MediaExtractor but cannot
+                // expose an AssetFileDescriptor. Do not silently skip these tracks.
+                extractor.setDataSource(context, uri, null)
+            }
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: return@withContext null
