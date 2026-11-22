@@ -44,6 +44,7 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         "${MediaStore.Audio.Media.IS_MUSIC} != 0",
         null, "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
     ) ?: throw IllegalStateException("MediaStore audio query returned no cursor")
+    var malformedAudioRows = 0
     cursor.use { cursor ->
         val id = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
         val title = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
@@ -79,9 +80,15 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                malformedAudioRows++
                 android.util.Log.w("MusicSquareLibrary", "Skipping malformed MediaStore audio row", error)
             }
         }
+    }
+    // A nonempty provider result with zero readable rows is a failed scan,
+    // not an empty music library. Preserve the previous library in refresh().
+    if (songs.isEmpty() && malformedAudioRows > 0) {
+        throw IllegalStateException("MediaStore returned $malformedAudioRows unreadable audio rows")
     }
     val genreMap = mutableMapOf<Long,String>()
     // Genre metadata is optional. Some providers deny or do not implement this
