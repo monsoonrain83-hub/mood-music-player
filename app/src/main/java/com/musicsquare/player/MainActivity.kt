@@ -700,7 +700,9 @@ private fun PlayerApp(controller: MediaController?) {
                             Spacer(Modifier.width(8.dp))
                             Text("Browse your library")
                         }
-                        val unclassifiedCount=songs.count { store.cell(it.id) !in 0..24 }
+                        val unclassifiedCount = remember(songs, assignmentsVersion) {
+                            songs.count { store.cell(it.id) !in 0..24 }
+                        }
                         if(unclassifiedCount>0) {
                             Spacer(Modifier.height(8.dp))
                             Text("$unclassifiedCount songs need acoustic grouping",color=accent,fontWeight=FontWeight.SemiBold)
