@@ -44,6 +44,22 @@ class AcousticMoodEstimateTest {
             }
         }
     }
+    @Test fun missingTempoNeverInventsEmotionalValenceAtEnergyExtremes() {
+        // An energy-only fallback must remain in the centre mood column,
+        // even for very quiet or loud tracks; energy controls the row instead.
+        for (energy in listOf(0f, 0.01f, 0.5f, 0.99f, 1f)) {
+            assertEquals(0.5f, AcousticMoodEstimate.estimate(AudioAnalysis(energy, null, 0f))!!, 0.0001f)
+        }
+    }
+
+    @Test fun reliableTempoOrderingIsMonotonicForSameEnergy() {
+        val slow = AcousticMoodEstimate.estimate(AudioAnalysis(0.5f, 60f, 1f))!!
+        val medium = AcousticMoodEstimate.estimate(AudioAnalysis(0.5f, 120f, 1f))!!
+        val fast = AcousticMoodEstimate.estimate(AudioAnalysis(0.5f, 200f, 1f))!!
+        assertTrue(slow < medium)
+        assertTrue(medium < fast)
+    }
+
     @Test fun abstainsOnInvalidEnergy() {
         assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(Float.NaN, 120f, 0.4f)))
         assertNull(AcousticMoodEstimate.estimate(AudioAnalysis(Float.POSITIVE_INFINITY, 120f, 0.4f)))
