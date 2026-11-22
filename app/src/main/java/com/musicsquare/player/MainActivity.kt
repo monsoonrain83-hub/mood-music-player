@@ -1189,7 +1189,13 @@ private fun PlayerApp(controller: MediaController?) {
                                 TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel analysis") }
                             }
                         }
-                        if (songs.isNotEmpty()) Text("${songs.size} scanned • ${songs.count { store.cell(it.id) in 0..24 }} grouped • ${songs.count { store.cell(it.id) !in 0..24 }} unclassified",color=muted,fontSize=12.sp)
+                        if (songs.isNotEmpty()) {
+                            // SharedPreferences is not observable Compose state: refresh counts after assigning.
+                            val groupedCount = remember(songs, assignmentsVersion) {
+                                songs.count { store.cell(it.id) in 0..24 }
+                            }
+                            Text("${songs.size} scanned • $groupedCount grouped • ${songs.size - groupedCount} unclassified",color=muted,fontSize=12.sp)
+                        }
                         moodAnalysisSummary?.let { Text(it,color=muted,fontSize=12.sp) }
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
