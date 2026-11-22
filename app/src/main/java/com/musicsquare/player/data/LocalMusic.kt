@@ -55,6 +55,11 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
         queryAudio(columns)
     } catch (error: IllegalArgumentException) {
         android.util.Log.w("MusicSquareLibrary", "Optional audio columns rejected; retrying required columns", error)
+        null
+    } ?: run {
+        // Some providers signal an unsupported projection by returning null
+        // instead of throwing. Retry the minimal projection in both cases.
+        android.util.Log.w("MusicSquareLibrary", "Audio query unavailable; retrying required columns")
         queryAudio(requiredColumns)
     } ?: throw IllegalStateException("MediaStore audio query returned no cursor")
     var malformedAudioRows = 0
