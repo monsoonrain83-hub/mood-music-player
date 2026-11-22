@@ -80,6 +80,13 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             try {
             val songId = cursor.getLong(id)
+            // Invalid provider IDs cannot form a usable content URI. Likewise,
+            // negative durations are corrupt metadata, not playable tracks.
+            // Surface these as unreadable rows instead of silently reporting
+            // a successful scan that cannot feed the mood analyzer.
+            if (songId <= 0L || cursor.isNull(duration) || cursor.getLong(duration) < 0L) {
+                throw IllegalArgumentException("Invalid MediaStore audio ID or duration")
+            }
             songs += LocalSong(
                 songId,
                 cursor.getString(title) ?: "Unknown title",
