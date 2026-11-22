@@ -39,11 +39,24 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
     // not report this as a successful scan of zero songs: surface the failure
     // to the existing refresh error UI so the user can distinguish it from
     // an actually empty music collection.
-    val cursor = context.contentResolver.query(
-        collection, columns,
+    // Some OEM providers reject optional columns in the projection itself.
+    // Retry with the required audio columns rather than losing the library.
+    val requiredColumns = arrayOf(
+        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.DURATION
+    )
+    fun queryAudio(projection: Array<String>) = context.contentResolver.query(
+        collection, projection,
         "${MediaStore.Audio.Media.IS_MUSIC} != 0",
         null, "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
-    ) ?: throw IllegalStateException("MediaStore audio query returned no cursor")
+    )
+    val cursor = try {
+        queryAudio(columns)
+    } catch (error: IllegalArgumentException) {
+        android.util.Log.w("MusicSquareLibrary", "Optional audio columns rejected; retrying required columns", error)
+        queryAudio(requiredColumns)
+    } ?: throw IllegalStateException("MediaStore audio query returned no cursor")
     var malformedAudioRows = 0
     cursor.use { cursor ->
         val id = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
