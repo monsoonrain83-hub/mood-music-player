@@ -123,6 +123,10 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
     // An empty successful scan has no tracks to enrich.
     if (songs.isEmpty()) return@withContext emptyList<LocalSong>()
     kotlinx.coroutines.currentCoroutineContext().ensureActive()
+    // Only retain genre associations for tracks returned by this scan. Some
+    // MediaProviders expose thousands of genre members unrelated to the
+    // playable library; keeping those IDs wastes memory on large collections.
+    val scannedSongIds = songs.mapTo(HashSet<Long>(songs.size)) { it.id }
     val genreMap = mutableMapOf<Long,String>()
     // Genre metadata is optional. Some providers deny or do not implement this
     // collection even when the main audio query succeeds. Keep scanned tracks.
@@ -143,7 +147,8 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
                     while (members.moveToNext()) {
                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                         try {
-                            genreMap[members.getLong(aid)] = name
+                            val audioId = members.getLong(aid)
+                            if (audioId in scannedSongIds) genreMap[audioId] = name
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
