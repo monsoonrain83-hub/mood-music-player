@@ -36,6 +36,28 @@ class AnalysisStoreInstrumentedTest {
     }
 
     @Test
+    fun corruptOptionalTempoAndValenceRetainUsableEnergy() {
+        val prefs = context.getSharedPreferences("audio_analysis_v1", Context.MODE_PRIVATE)
+        val id = 9223372036854000002L
+        val revision = 1700000000L
+        val key = "${id}_${revision}"
+        try {
+            prefs.edit().putFloat("${key}_energy", 0.65f)
+                .putString("${key}_bpm", "corrupt")
+                .putFloat("${key}_confidence", 0f)
+                .putString("${key}_valence", "corrupt").commit()
+            val cached = AnalysisStore(context).read(id, revision)
+            assertNotNull(cached)
+            assertEquals(0.65f, cached!!.energy, 0.0001f)
+            assertNull(cached.bpm)
+            assertNull(cached.valence)
+        } finally {
+            prefs.edit().remove("${key}_energy").remove("${key}_bpm")
+                .remove("${key}_confidence").remove("${key}_valence").commit()
+        }
+    }
+
+    @Test
     fun corruptCachedEnergyDoesNotMasqueradeAsCompletedAnalysis() {
         val prefs = context.getSharedPreferences("audio_analysis_v1", Context.MODE_PRIVATE)
         val id = 9223372036854000001L
