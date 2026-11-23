@@ -119,7 +119,7 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
     if (songs.isEmpty() && malformedAudioRows > 0) {
         throw IllegalStateException("MediaStore returned $malformedAudioRows unreadable audio rows")
     }
-    val genreMap = mutableMapOf<Long,String>()
+    // Avoid an expensive provider-wide genre traversal for an empty library.\n    // An empty successful scan has no tracks to enrich.\n    if (songs.isEmpty()) return@withContext emptyList<LocalSong>()\n    kotlinx.coroutines.currentCoroutineContext().ensureActive()\n    val genreMap = mutableMapOf<Long,String>()
     // Genre metadata is optional. Some providers deny or do not implement this
     // collection even when the main audio query succeeds. Keep scanned tracks.
     try {
