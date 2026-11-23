@@ -170,21 +170,26 @@ class OfflineAudioAnalyzer(private val context: Context) {
                         // The decoder can resample or change channel count. Keep the
                         // 50-ms envelope and three-second minimum tied to decoded PCM.
                         val decodedFormat = decoder.outputFormat
-                        decodedSampleRate = decodedFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                        decodedChannels = decodedFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
-                        if (decodedSampleRate <= 0) return@withContext null
-                        windowSamples = (decodedSampleRate / 20).coerceAtLeast(1)
-                        maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
-                        // Samples decoded under the previous PCM format cannot be
-                        // combined with this format's channel count/sample rate.
-                        // Reset the RMS accumulator as well as the beat envelope;
-                        // otherwise the three-second minimum and loudness can be
-                        // calculated from incompatible audio formats.
-                        totalSamples = 0L
-                        totalSquared = 0.0
-                        envelope.clear()
-                        windowSum = 0.0
-                        windowCount = 0
+                        val newSampleRate = decodedFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        val newChannels = decodedFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+                        if (newSampleRate <= 0) return@withContext null
+                        // Codec output format notifications can change metadata or PCM
+                        // encoding without changing the sample rate or channel count.
+                        // Discarding already-decoded samples in that case makes short
+                        // but readable songs fail the three-second analysis threshold.
+                        if (newSampleRate != decodedSampleRate || newChannels != decodedChannels) {
+                            decodedSampleRate = newSampleRate
+                            decodedChannels = newChannels
+                            windowSamples = (decodedSampleRate / 20).coerceAtLeast(1)
+                            maxSamples = decodedSampleRate.toLong() * 45 * decodedChannels
+                            // Only incompatible PCM timing/channel layouts require
+                            // resetting the RMS and beat-envelope accumulators.
+                            totalSamples = 0L
+                            totalSquared = 0.0
+                            envelope.clear()
+                            windowSum = 0.0
+                            windowCount = 0
+                        }
                     }
                 }
             }
