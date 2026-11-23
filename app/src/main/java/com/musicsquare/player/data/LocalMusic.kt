@@ -53,7 +53,11 @@ suspend fun scanLocalMusic(context: Context): List<LocalSong> = withContext(Disp
     )
     val cursor = try {
         queryAudio(columns)
-    } catch (error: IllegalArgumentException) {
+    } catch (error: Exception) {
+        // Android/OEM MediaProviders may report unsupported optional columns as
+        // SQLiteException rather than IllegalArgumentException. Retry only for
+        // projection-related failures; never mask permission or IO failures.
+        if (error !is IllegalArgumentException && error !is android.database.sqlite.SQLiteException) throw error
         android.util.Log.w("MusicSquareLibrary", "Optional audio columns rejected; retrying required columns", error)
         null
     } ?: run {
