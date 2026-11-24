@@ -640,6 +640,153 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             }
     val editCurrentSongTags: () -> Unit = { openCurrentSongTags() }
+    fun startMoodAnalysis() {
+        // Mark the operation busy synchronously: rapid taps must not
+        // enqueue multiple full-library decoders before launch starts.
+        if (analysisProgress != null || songs.isEmpty()) return
+        analysisProgress="Starting offline analysis"
+        moodAnalysisSummary=null
+        analysisJob=scope.launch {
+            // Freeze the target library for this run. A refresh can replace
+            // Compose's song list while decoding is in progress.
+            val batch = songs.toList()
+            analyzed=0
+            var successes=0
+            var assigned=0
+            var unreadable=0
+            var readableUnclassified=0
+            var classifiedAlready=0
+            var reusedCached=0
+            var decodedFresh=0
+            try {
+                // Loading training examples may read cached audio features for the entire library.
+                // Keep that disk work off the UI thread before starting the scan.
+                // A malformed training preference or cached feature must not
+                // prevent acoustic fallback for the entire music library.
+                // Preserve cancellation; only isolate recoverable training errors.
+                val personalExamples = try {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        trainingStore.examples(batch, analysisStore)
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    android.util.Log.w("MusicSquareMood", "Personal training unavailable; using acoustic fallback", error)
+                    emptyList()
+                }
+                batch.forEachIndexed { index,song ->
+                    // Yield on every track, including skipped ones, so cancellation
+                    // remains responsive during large cached libraries.
+                    kotlinx.coroutines.yield()
+                    // Cache reads, classifier predictions and storage can also
+                    // fail. Keep processing the remaining tracks.
+                    try {
+                    if (store.cell(song.id) in 0..24) {
+                        analysisProgress="Checking ${index+1}/${batch.size}: already grouped"
+                        classifiedAlready++
+                        return@forEachIndexed
+                    }
+                    analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
+                    // A corrupt cached energy value must not permanently
+                    // strand a readable track in the unclassified bucket.
+                    // Retry decoding once and replace the cache only when
+                    // the fresh analysis contains usable energy.
+                    // A corrupt cache entry must not strand a readable track.
+                    val cached = try {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            analysisStore.read(song.id, song.modified)
+                        }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        android.util.Log.w("MusicSquareMood", "Cache read failed for track ${song.id}; decoding audio", error)
+                        null
+                    }
+                    val result = if (cached != null && cached.energy.isFinite() &&
+                        cached.energy in 0f..1f) {
+                        cached.also { reusedCached++ }
+                    } else {
+                        // One unreadable or malformed media file must not abort
+                        // the remaining library. Preserve coroutine cancellation.
+                        try {
+                            // Decoding can block for seconds on large or damaged files.
+                            // Keep it off Compose's main thread so playback and Cancel
+                            // controls remain responsive throughout a library scan.
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                analyzer.analyze(song.uri)?.also { fresh ->
+                                    decodedFresh++
+                                    if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
+                                        // Cache persistence is best-effort: a full or
+                                        // unwritable cache must not discard decoded audio
+                                        // and prevent this track from being classified.
+                                        try {
+                                            analysisStore.save(song.id, song.modified, fresh)
+                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                            throw cancelled
+                                        } catch (error: Exception) {
+                                            android.util.Log.w("MusicSquareMood", "Could not cache decoded track ${song.id}; continuing with fresh features", error)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            android.util.Log.w("MusicSquareMood", "Analysis failed for track ${song.id}", error)
+                            null
+                        }
+                    }
+                    // Reject invalid decoder energy before counting the track as analyzed.
+                    // Otherwise an unusable result is reported as readable but unclassified.
+                    if(result != null && result.energy.isFinite() && result.energy in 0f..1f) {
+                        if(store.cell(song.id) !in 0..24) {
+                            // User-trained supervised model abstains when evidence is insufficient.
+                            val prediction = try {
+                                PersonalMoodModel.predict(result.energy, result.bpm, personalExamples, song.id)
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                // A failed optional personal model must not discard decoded audio.
+                                android.util.Log.w("MusicSquareMood", "Personal prediction failed for track ${song.id}; using acoustic fallback", error)
+                                null
+                            }
+                            // Never fabricate neutral valence: abstain unless a
+                            // supervised prediction or actual valence is available.
+                            // Reject corrupt cached analysis instead of passing NaN
+                            // into MoodCoordinates.cell (which throws on non-finite input).
+                            val inferredCell = if (result.energy.isFinite() && result.energy in 0f..1f) {
+                                prediction?.cell?.takeIf { it in 0..24 } ?: (result.valence?.takeIf { it.isFinite() && it in 0f..1f }
+                                    ?: AcousticMoodEstimate.estimate(result))?.let { value ->
+                                    MoodCoordinates.cell(value, result.energy)
+                                }
+                            } else null
+                            if(inferredCell!=null) {
+                                store.assign(song.id,inferredCell)
+                                assignmentsVersion++
+                                assigned++
+                            } else {
+                                readableUnclassified++
+                            }
+                        }
+                        successes++
+                        analyzed=successes
+                    } else unreadable++
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        unreadable++
+                        android.util.Log.w("MusicSquareMood", "Mood grouping failed for track ${song.id}", error)
+                    }
+                }
+                analyzed=successes
+                moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                moodAnalysisSummary="Analysis cancelled: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded) before cancellation."
+                throw cancelled
+            } finally { analysisProgress=null }
+        }
+    }
+
     MaterialTheme(colorScheme = darkColorScheme(primary=accent,background=bg,surface=surface)) {
         Scaffold(containerColor=bg, bottomBar={
             Column {
@@ -803,149 +950,8 @@ private fun PlayerApp(controller: MediaController?) {
                         val unclassifiedCount = songs.size - classifiedCount
                         Text("${songs.size} scanned • $classifiedCount classified • $unclassifiedCount unclassified",color=muted,fontSize=12.sp)
                         Button(enabled=allowed && songs.any { store.cell(it.id) !in 0..24 } && analysisProgress==null,
-                            onClick={
-                                // Mark the operation busy synchronously: rapid taps must not
-                                // enqueue multiple full-library decoders before launch starts.
-                                analysisProgress="Starting offline analysis"
-                                moodAnalysisSummary=null
-                                analysisJob=scope.launch {
-                                    // Freeze the target library for this run. A refresh can replace
-                                    // Compose's song list while decoding is in progress.
-                                    val batch = songs.toList()
-                                    var successes=0
-                                    var assigned=0
-                                    var unreadable=0
-                                    var readableUnclassified=0
-                                    var classifiedAlready=0
-                                    var reusedCached=0
-                                    var decodedFresh=0
-                                    try {
-                                        // Loading training examples may read cached audio features for the entire library.
-                                        // Keep that disk work off the UI thread before starting the scan.
-                                        // A malformed training preference or cached feature must not
-                                        // prevent acoustic fallback for the entire music library.
-                                        // Preserve cancellation; only isolate recoverable training errors.
-                                        val personalExamples = try {
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                trainingStore.examples(batch, analysisStore)
-                                            }
-                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                            throw cancelled
-                                        } catch (error: Exception) {
-                                            android.util.Log.w("MusicSquareMood", "Personal training unavailable; using acoustic fallback", error)
-                                            emptyList()
-                                        }
-                                        batch.forEachIndexed { index,song ->
-                                            // Yield on every track, including skipped ones, so cancellation
-                                            // remains responsive during large cached libraries.
-                                            kotlinx.coroutines.yield()
-                                            // Cache reads, classifier predictions and storage can also
-                                            // fail. Keep processing the remaining tracks.
-                                            try {
-                                            if (store.cell(song.id) in 0..24) {
-                                                analysisProgress="Checking ${index+1}/${batch.size}: already grouped"
-                                                classifiedAlready++
-                                                return@forEachIndexed
-                                            }
-                                            analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
-                                            // A corrupt cached energy value must not permanently
-                                            // strand a readable track in the unclassified bucket.
-                                            // Retry decoding once and replace the cache only when
-                                            // the fresh analysis contains usable energy.
-                                            // A corrupt cache entry must not strand a readable track.
-                                            val cached = try {
-                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                    analysisStore.read(song.id, song.modified)
-                                                }
-                                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                throw cancelled
-                                            } catch (error: Exception) {
-                                                android.util.Log.w("MusicSquareMood", "Cache read failed for track ${song.id}; decoding audio", error)
-                                                null
-                                            }
-                                            val result = if (cached != null && cached.energy.isFinite() &&
-                                                cached.energy in 0f..1f) {
-                                                cached.also { reusedCached++ }
-                                            } else {
-                                                // One unreadable or malformed media file must not abort
-                                                // the remaining library. Preserve coroutine cancellation.
-                                                try {
-                                                    // Decoding can block for seconds on large or damaged files.
-                                                    // Keep it off Compose's main thread so playback and Cancel
-                                                    // controls remain responsive throughout a library scan.
-                                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                        analyzer.analyze(song.uri)?.also { fresh ->
-                                                            decodedFresh++
-                                                            if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
-                                                                // Cache persistence is best-effort: a full or
-                                                                // unwritable cache must not discard decoded audio
-                                                                // and prevent this track from being classified.
-                                                                try {
-                                                                    analysisStore.save(song.id, song.modified, fresh)
-                                                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                                    throw cancelled
-                                                                } catch (error: Exception) {
-                                                                    android.util.Log.w("MusicSquareMood", "Could not cache decoded track ${song.id}; continuing with fresh features", error)
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                    throw cancelled
-                                                } catch (error: Exception) {
-                                                    android.util.Log.w("MusicSquareMood", "Analysis failed for track ${song.id}", error)
-                                                    null
-                                                }
-                                            }
-                                            // Reject invalid decoder energy before counting the track as analyzed.
-                                            // Otherwise an unusable result is reported as readable but unclassified.
-                                            if(result != null && result.energy.isFinite() && result.energy in 0f..1f) {
-                                                if(store.cell(song.id) !in 0..24) {
-                                                    // User-trained supervised model abstains when evidence is insufficient.
-                                                    val prediction = try {
-                                                        PersonalMoodModel.predict(result.energy, result.bpm, personalExamples, song.id)
-                                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                        throw cancelled
-                                                    } catch (error: Exception) {
-                                                        // A failed optional personal model must not discard decoded audio.
-                                                        android.util.Log.w("MusicSquareMood", "Personal prediction failed for track ${song.id}; using acoustic fallback", error)
-                                                        null
-                                                    }
-                                                    // Never fabricate neutral valence: abstain unless a
-                                                    // supervised prediction or actual valence is available.
-                                                    // Reject corrupt cached analysis instead of passing NaN
-                                                    // into MoodCoordinates.cell (which throws on non-finite input).
-                                                    val inferredCell = if (result.energy.isFinite() && result.energy in 0f..1f) {
-                                                        prediction?.cell?.takeIf { it in 0..24 } ?: (result.valence?.takeIf { it.isFinite() && it in 0f..1f }
-                                                            ?: AcousticMoodEstimate.estimate(result))?.let { value ->
-                                                            MoodCoordinates.cell(value, result.energy)
-                                                        }
-                                                    } else null
-                                                    if(inferredCell!=null) {
-                                                        store.assign(song.id,inferredCell)
-                                                        assignmentsVersion++
-                                                        assigned++
-                                                    } else {
-                                                        readableUnclassified++
-                                                    }
-                                                }
-                                                successes++
-                                            } else unreadable++
-                                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                throw cancelled
-                                            } catch (error: Exception) {
-                                                unreadable++
-                                                android.util.Log.w("MusicSquareMood", "Mood grouping failed for track ${song.id}", error)
-                                            }
-                                        }
-                                        analyzed=successes
-                                        moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
-                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                        moodAnalysisSummary="Analysis cancelled: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded) before cancellation."
-                                        throw cancelled
-                                    } finally { analysisProgress=null }
-                                }
-                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
+                            onClick={ startMoodAnalysis() }
+                        ,modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
                         analysisProgress?.let { progress ->
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
@@ -1073,121 +1079,7 @@ private fun PlayerApp(controller: MediaController?) {
                         if (!allowed) Button(onClick={request.launch(permission)}) { Text("Allow music access") }
                         OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        TextButton(enabled=allowed && analysisProgress==null && songs.any { store.cell(it.id) !in 0..24 },onClick={
-                            // Claim the shared analysis slot before launching the coroutine.
-                            // Otherwise rapid taps can enqueue multiple library decoders.
-                            analysisProgress="Analyzing local tracks…"
-                            moodAnalysisSummary=null
-                            analysisJob=scope.launch {
-                                val batch=songs.toList()
-                                analyzed=0
-                                var newlyGrouped=0
-                                var decodeFailures=0
-                                var stillUnclassified=0
-                                var alreadyGrouped=0
-                                try {
-                                    // Match the Mood screen's classification priority: learned
-                                    // labels first, then valid valence, then acoustic proxy.
-                                    // Training examples may read many cached feature files; keep disk IO off Compose.
-                                    // A damaged training cache must not abort acoustic grouping.
-                                    val personalExamples = try {
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            trainingStore.examples(batch, analysisStore)
-                                        }
-                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                        throw cancelled
-                                    } catch (error: Exception) {
-                                        android.util.Log.w("MusicSquareMood", "Library training unavailable; using acoustic fallback", error)
-                                        emptyList()
-                                    }
-                                    for ((index,song) in batch.withIndex()) {
-                                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                                        analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
-                                        // Already-grouped tracks do not need another decode or cache read.
-                                        // Match the incremental behavior of the Mood screen and
-                                        // preserve existing manual assignments.
-                                        if (store.cell(song.id) in 0..24) {
-                                            alreadyGrouped++
-                                            continue
-                                        }
-                                        // Feature scans should populate the grid, not just cache BPM.
-                                        // Reuse valid cache; decode invalid or missing features on IO.
-                                        try {
-                                            // A corrupt cache entry must not strand a readable track.
-                                            val cached = try {
-                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                    analysisStore.read(song.id, song.modified)
-                                                }
-                                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                throw cancelled
-                                            } catch (error: Exception) {
-                                                android.util.Log.w("MusicSquareMood", "Cache read failed for track ${song.id}; decoding audio", error)
-                                                null
-                                            }
-                                            val features = if (cached != null && cached.energy.isFinite() && cached.energy in 0f..1f) {
-                                                cached
-                                            } else {
-                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                    analyzer.analyze(song.uri)
-                                                }?.takeIf { it.energy.isFinite() && it.energy in 0f..1f }
-                                                    ?.also { features ->
-                                                        // A cache write failure must not turn a successful
-                                                        // decode into an unclassified track.
-                                                        try {
-                                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                                analysisStore.save(song.id, song.modified, features)
-                                                            }
-                                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                            throw cancelled
-                                                        } catch (error: Exception) {
-                                                            android.util.Log.w("MusicSquareMood", "Could not cache library track ${song.id}; continuing with fresh features", error)
-                                                        }
-                                                    }
-                                            }
-                                            if (features != null && features.energy.isFinite() && features.energy in 0f..1f) {
-                                                analyzed++
-                                                if (store.cell(song.id) !in 0..24) {
-                                                    val prediction = try {
-                                                        PersonalMoodModel.predict(features.energy, features.bpm, personalExamples, song.id)
-                                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                                        throw cancelled
-                                                    } catch (error: Exception) {
-                                                        // Preserve readable tracks when optional personalised inference fails.
-                                                        android.util.Log.w("MusicSquareMood", "Library personal prediction failed for track ${song.id}; using acoustic fallback", error)
-                                                        null
-                                                    }
-                                                    val inferredCell = prediction?.cell?.takeIf { it in 0..24 }
-                                                        ?: (features.valence?.takeIf { it.isFinite() && it in 0f..1f }
-                                                            ?: AcousticMoodEstimate.estimate(features))?.let {
-                                                            MoodCoordinates.cell(it, features.energy)
-                                                        }
-                                                    if (inferredCell != null) {
-                                                        store.assign(song.id, inferredCell)
-                                                        assignmentsVersion++
-                                                        newlyGrouped++
-                                                    } else stillUnclassified++
-                                                }
-                                            } else {
-                                                // Invalid decoder/cache energy is not a usable analysis result.
-                                                // Never pass it to the personal model or grid coordinates.
-                                                decodeFailures++
-                                            }
-                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                            throw cancelled
-                                        } catch (error: Exception) {
-                                            decodeFailures++
-                                            android.util.Log.w("MusicSquareMood", "Library feature scan failed for track ${song.id}", error)
-                                        }
-                                    }
-                                    moodAnalysisSummary="Library analysis: $newlyGrouped newly grouped, $alreadyGrouped already grouped (skipped), $stillUnclassified readable but unclassified, $decodeFailures decode failures."
-                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                    moodAnalysisSummary="Library analysis cancelled: $newlyGrouped newly grouped, $alreadyGrouped already grouped (skipped), $stillUnclassified readable but unclassified, $decodeFailures decode failures before cancellation."
-                                    throw cancelled
-                                } finally {
-                                    analysisProgress=null
-                                }
-                            }
-                        }) { Text("Analyze audio + group on mood grid") }
+                        TextButton(enabled=allowed && analysisProgress==null && songs.any { store.cell(it.id) !in 0..24 },onClick={ startMoodAnalysis() }) { Text("Analyze audio + group on mood grid") }
                         analysisProgress?.let { progress ->
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
