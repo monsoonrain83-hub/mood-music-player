@@ -606,6 +606,7 @@ private fun PlayerApp(controller: MediaController?) {
         }
     }
     fun openCurrentSongTags() {
+        if (tagBusy || tagReadBusy) return
 
                             current?.let { song ->
                                 selectedTagUris=listOf(song.uri)
@@ -650,7 +651,7 @@ private fun PlayerApp(controller: MediaController?) {
                             Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=ink)
                             Text(song.artist,fontSize=12.sp,color=muted,maxLines=1)
                         }
-                        IconButton(enabled=!tagBusy,onClick=editCurrentSongTags) {
+                        IconButton(enabled=!tagBusy && !tagReadBusy,onClick=editCurrentSongTags) {
                             Icon(Icons.Default.Edit,"Edit playing song tags",tint=accent)
                         }
                         IconButton(onClick={controller?.seekToPreviousMediaItem()}) {
@@ -1304,7 +1305,7 @@ private fun PlayerApp(controller: MediaController?) {
                         Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=ink,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(enabled=current!=null && !tagBusy,onClick=editCurrentSongTags) {
+                            OutlinedButton(enabled=current!=null && !tagBusy && !tagReadBusy,onClick=editCurrentSongTags) {
                                 Icon(Icons.Default.Edit,contentDescription=null,tint=ink)
                                 Text(" Edit song tags")
                             }
@@ -1465,14 +1466,14 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             if(studioPage=="Tag Editor") {
                             Text("Batch tag editor • MP3, FLAC, WAV, OGG, M4A",color=accent,fontWeight=FontWeight.Bold)
-                            OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
+                            OutlinedButton(enabled=!tagBusy && !tagReadBusy,onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
                             Text("${selectedTagUris.size} selected",color=muted)
                             OutlinedButton(enabled=selectedTagUris.size==1 && !tagBusy && !tagReadBusy,onClick={
                                 val uri=selectedTagUris.singleOrNull() ?: return@OutlinedButton
                                 scope.launch {
                                     tagReadBusy=true
                                     try {
-                                        val current=tagInspector.read(uri)
+                                        val current=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { tagInspector.read(uri) }
                                         tagTitle=current.title.orEmpty()
                                         tagArtist=current.artist.orEmpty()
                                         tagAlbum=current.album.orEmpty()
@@ -1491,15 +1492,15 @@ private fun PlayerApp(controller: MediaController?) {
                                 Text(if(tagReadBusy)"Reading tags..." else "Load existing tags (single file)")
                             }
 
-                            OutlinedTextField(value=tagTitle,onValueChange={tagTitle=it},label={Text("Title (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagArtist,onValueChange={tagArtist=it},label={Text("Artist")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagYear,onValueChange={tagYear=it},label={Text("Year")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagGenre,onValueChange={tagGenre=it},label={Text("Genre")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagTrack,onValueChange={tagTrack=it},label={Text("Track number (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagComment,onValueChange={tagComment=it},label={Text("Comment (blank = unchanged)")},modifier=Modifier.fillMaxWidth(),minLines=2)
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagTitle,onValueChange={tagTitle=it},label={Text("Title (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagArtist,onValueChange={tagArtist=it},label={Text("Artist")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagYear,onValueChange={tagYear=it},label={Text("Year")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagGenre,onValueChange={tagGenre=it},label={Text("Genre")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagTrack,onValueChange={tagTrack=it},label={Text("Track number (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagComment,onValueChange={tagComment=it},label={Text("Comment (blank = unchanged)")},modifier=Modifier.fillMaxWidth(),minLines=2)
                             Text("Batch editing changes the selected original files. Back up important recordings first.",color=muted,fontSize=12.sp)
-                            Button(enabled=!tagBusy && selectedTagUris.isNotEmpty(),onClick={
+                            Button(enabled=!tagBusy && !tagReadBusy && selectedTagUris.isNotEmpty(),onClick={
                                 scope.launch {
                                     tagBusy=true
                                     val results=tagEditor.writeBatch(selectedTagUris,TagChanges(
