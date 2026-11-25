@@ -655,6 +655,8 @@ private fun PlayerApp(controller: MediaController?) {
             var successes=0
             var assigned=0
             var unreadable=0
+            var groupingFailures=0
+            var groupedDuringAnalysis=0
             var readableUnclassified=0
             var classifiedAlready=0
             var reusedCached=0
@@ -769,20 +771,23 @@ private fun PlayerApp(controller: MediaController?) {
                                 readableUnclassified++
                             }
                         }
+                        else {
+                            groupedDuringAnalysis++
+                        }
                         successes++
                         analyzed=successes
                     } else unreadable++
                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
                         throw cancelled
                     } catch (error: Exception) {
-                        unreadable++
+                        groupingFailures++
                         android.util.Log.w("MusicSquareMood", "Mood grouping failed for track ${song.id}", error)
                     }
                 }
                 analyzed=successes
-                moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
+                moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures, $groupingFailures grouping/storage failures, $groupedDuringAnalysis grouped during analysis. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                moodAnalysisSummary="Analysis cancelled: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded) before cancellation."
+                moodAnalysisSummary="Analysis cancelled: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures, $groupingFailures grouping/storage failures, $groupedDuringAnalysis grouped during analysis. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded) before cancellation."
                 throw cancelled
             } finally { analysisProgress=null }
         }
