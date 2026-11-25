@@ -309,7 +309,7 @@ private fun PlayerApp(controller: MediaController?) {
     val favorites = remember { context.getSharedPreferences("favorites", android.content.Context.MODE_PRIVATE) }
     val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     var allowed by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) }
-    fun refresh() {
+    fun refresh(afterScan: (() -> Unit)? = null) {
         // Avoid overlapping MediaStore scans: an older result must not replace
         // a newer library snapshot when refresh is tapped repeatedly.
         if (!allowed || loading) return
@@ -319,6 +319,7 @@ private fun PlayerApp(controller: MediaController?) {
                 // scanLocalMusic already switches to Dispatchers.IO internally.
                 songs = scanLocalMusic(context)
                 error = null
+                afterScan?.invoke()
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
@@ -949,7 +950,7 @@ private fun PlayerApp(controller: MediaController?) {
                          val classifiedCount = remember(songs, assignmentsVersion) { songs.count { store.cell(it.id) in 0..24 } }
                         val unclassifiedCount = songs.size - classifiedCount
                         Text("${songs.size} scanned • $classifiedCount classified • $unclassifiedCount unclassified",color=muted,fontSize=12.sp)
-                        Button(enabled=allowed && songs.any { store.cell(it.id) !in 0..24 } && analysisProgress==null,
+                        Button(enabled=allowed && !loading && songs.any { store.cell(it.id) !in 0..24 } && analysisProgress==null,
                             onClick={ startMoodAnalysis() }
                         ,modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
                         analysisProgress?.let { progress ->
@@ -1074,12 +1075,13 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("${songs.size} local songs",color=muted,modifier=Modifier.weight(1f))
-                            TextButton(onClick={if(allowed)refresh() else request.launch(permission)}) { Text("Refresh") }
+                            TextButton(enabled=!loading && analysisProgress==null,onClick={if(allowed)refresh() else request.launch(permission)}) { Text("Refresh library only") }
                         }
                         if (!allowed) Button(onClick={request.launch(permission)}) { Text("Allow music access") }
                         OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        TextButton(enabled=allowed && analysisProgress==null && songs.any { store.cell(it.id) !in 0..24 },onClick={ startMoodAnalysis() }) { Text("Analyze audio + group on mood grid") }
+                        Button(enabled=allowed && !loading && analysisProgress==null, onClick={ refresh { startMoodAnalysis() } }, modifier=Modifier.fillMaxWidth()) { Text("Scan library + classify moods") }
+                        TextButton(enabled=allowed && !loading && analysisProgress==null && songs.any { store.cell(it.id) !in 0..24 },onClick={ startMoodAnalysis() }) { Text("Analyze audio + group on mood grid") }
                         analysisProgress?.let { progress ->
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
