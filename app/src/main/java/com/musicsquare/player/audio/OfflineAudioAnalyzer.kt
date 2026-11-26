@@ -96,7 +96,7 @@ class OfflineAudioAnalyzer(private val context: Context) {
             val deadlineMs = android.os.SystemClock.elapsedRealtime() + 90_000L
             while (!outputEnded && totalSamples < maxSamples && loops++ < 100000) {
                 coroutineContext.ensureActive()
-                if (android.os.SystemClock.elapsedRealtime() > deadlineMs) return@withContext null
+                if (android.os.SystemClock.elapsedRealtime() > deadlineMs) break // Retain usable PCM already decoded.
                 if (!inputEnded) {
                     val index = decoder.dequeueInputBuffer(10000)
                     if (index >= 0) {
