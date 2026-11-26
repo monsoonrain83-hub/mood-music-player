@@ -16,9 +16,9 @@ class AnalysisStore(context: Context) {
         if (!prefs.contains("${key}_energy")) return null
         return runCatching {
             val energy = prefs.getFloat("${key}_energy", Float.NaN)
-            val bpmValue = prefs.getFloat("${key}_bpm", -1f)
+            val bpmValue = runCatching { prefs.getFloat("${key}_bpm", -1f) }.getOrDefault(-1f)
             val confidence = prefs.getFloat("${key}_confidence", 0f)
-            val valenceValue = prefs.getFloat("${key}_valence", -1f)
+            val valenceValue = runCatching { prefs.getFloat("${key}_valence", -1f) }.getOrDefault(-1f)
             if (!energy.isFinite() || energy !in 0f..1f ||
                 !confidence.isFinite() || confidence !in 0f..1f) return null
             AudioAnalysis(

@@ -285,6 +285,7 @@ private fun PlayerApp(controller: MediaController?) {
     var selectedTagUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var analysisJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var analysisProgress by remember { mutableStateOf<String?>(null) }
+    var moodAnalysisSummary by remember { mutableStateOf<String?>(null) }
     var analyzed by remember { mutableIntStateOf(0) }
     var songs by remember { mutableStateOf<List<LocalSong>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -308,13 +309,24 @@ private fun PlayerApp(controller: MediaController?) {
     val favorites = remember { context.getSharedPreferences("favorites", android.content.Context.MODE_PRIVATE) }
     val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     var allowed by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) }
-    fun refresh() {
-        if (!allowed) return
+    fun refresh(afterScan: (() -> Unit)? = null) {
+        // Avoid overlapping MediaStore scans: an older result must not replace
+        // a newer library snapshot when refresh is tapped repeatedly.
+        if (!allowed || loading) return
+        loading = true
         scope.launch {
-            loading = true
-            try { songs = scanLocalMusic(context); error = null }
-            catch (e: Exception) { error = e.localizedMessage ?: "Unable to scan music" }
-            finally { loading = false }
+            try {
+                // scanLocalMusic already switches to Dispatchers.IO internally.
+                songs = scanLocalMusic(context)
+                error = null
+                afterScan?.invoke()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                error = e.localizedMessage ?: "Unable to scan music"
+            } finally {
+                loading = false
+            }
         }
     }
     val tagExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { tagExportSource=it }
@@ -595,6 +607,7 @@ private fun PlayerApp(controller: MediaController?) {
         }
     }
     fun openCurrentSongTags() {
+        if (tagBusy || tagReadBusy) return
 
                             current?.let { song ->
                                 selectedTagUris=listOf(song.uri)
@@ -611,7 +624,10 @@ private fun PlayerApp(controller: MediaController?) {
                                 scope.launch {
                                     tagReadBusy=true
                                     try {
-                                        val tags=tagInspector.read(song.uri)
+                                        // Embedded metadata may require slow document-provider IO. Never block Compose playback controls.
+                                        val tags=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            tagInspector.read(song.uri)
+                                        }
                                         tagTitle=tags.title ?: song.title
                                         tagArtist=tags.artist ?: song.artist
                                         tagAlbum=tags.album ?: song.album
@@ -625,6 +641,158 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             }
     val editCurrentSongTags: () -> Unit = { openCurrentSongTags() }
+    fun startMoodAnalysis() {
+        // Mark the operation busy synchronously: rapid taps must not
+        // enqueue multiple full-library decoders before launch starts.
+        if (analysisProgress != null || songs.isEmpty()) return
+        analysisProgress="Starting offline analysis"
+        moodAnalysisSummary=null
+        analysisJob=scope.launch {
+            // Freeze the target library for this run. A refresh can replace
+            // Compose's song list while decoding is in progress.
+            val batch = songs.toList()
+            analyzed=0
+            var successes=0
+            var assigned=0
+            var unreadable=0
+            var groupingFailures=0
+            var groupedDuringAnalysis=0
+            var readableUnclassified=0
+            var classifiedAlready=0
+            var reusedCached=0
+            var decodedFresh=0
+            try {
+                // Loading training examples may read cached audio features for the entire library.
+                // Keep that disk work off the UI thread before starting the scan.
+                // A malformed training preference or cached feature must not
+                // prevent acoustic fallback for the entire music library.
+                // Preserve cancellation; only isolate recoverable training errors.
+                val personalExamples = try {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        trainingStore.examples(batch, analysisStore)
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    android.util.Log.w("MusicSquareMood", "Personal training unavailable; using acoustic fallback", error)
+                    emptyList()
+                }
+                batch.forEachIndexed { index,song ->
+                    // Yield on every track, including skipped ones, so cancellation
+                    // remains responsive during large cached libraries.
+                    kotlinx.coroutines.yield()
+                    // Cache reads, classifier predictions and storage can also
+                    // fail. Keep processing the remaining tracks.
+                    try {
+                    if (store.cell(song.id) in 0..24) {
+                        analysisProgress="Checking ${index+1}/${batch.size}: already grouped"
+                        classifiedAlready++
+                        return@forEachIndexed
+                    }
+                    analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
+                    // A corrupt cached energy value must not permanently
+                    // strand a readable track in the unclassified bucket.
+                    // Retry decoding once and replace the cache only when
+                    // the fresh analysis contains usable energy.
+                    // A corrupt cache entry must not strand a readable track.
+                    val cached = try {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            analysisStore.read(song.id, song.modified)
+                        }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        android.util.Log.w("MusicSquareMood", "Cache read failed for track ${song.id}; decoding audio", error)
+                        null
+                    }
+                    val result = if (cached != null && cached.energy.isFinite() &&
+                        cached.energy in 0f..1f) {
+                        cached.also { reusedCached++ }
+                    } else {
+                        // One unreadable or malformed media file must not abort
+                        // the remaining library. Preserve coroutine cancellation.
+                        try {
+                            // Decoding can block for seconds on large or damaged files.
+                            // Keep it off Compose's main thread so playback and Cancel
+                            // controls remain responsive throughout a library scan.
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                analyzer.analyze(song.uri)?.also { fresh ->
+                                    decodedFresh++
+                                    if (fresh.energy.isFinite() && fresh.energy in 0f..1f) {
+                                        // Cache persistence is best-effort: a full or
+                                        // unwritable cache must not discard decoded audio
+                                        // and prevent this track from being classified.
+                                        try {
+                                            analysisStore.save(song.id, song.modified, fresh)
+                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                            throw cancelled
+                                        } catch (error: Exception) {
+                                            android.util.Log.w("MusicSquareMood", "Could not cache decoded track ${song.id}; continuing with fresh features", error)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            android.util.Log.w("MusicSquareMood", "Analysis failed for track ${song.id}", error)
+                            null
+                        }
+                    }
+                    // Reject invalid decoder energy before counting the track as analyzed.
+                    // Otherwise an unusable result is reported as readable but unclassified.
+                    if(result != null && result.energy.isFinite() && result.energy in 0f..1f) {
+                        if(store.cell(song.id) !in 0..24) {
+                            // User-trained supervised model abstains when evidence is insufficient.
+                            val prediction = try {
+                                PersonalMoodModel.predict(result.energy, result.bpm, personalExamples, song.id)
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                // A failed optional personal model must not discard decoded audio.
+                                android.util.Log.w("MusicSquareMood", "Personal prediction failed for track ${song.id}; using acoustic fallback", error)
+                                null
+                            }
+                            // Never fabricate neutral valence: abstain unless a
+                            // supervised prediction or actual valence is available.
+                            // Reject corrupt cached analysis instead of passing NaN
+                            // into MoodCoordinates.cell (which throws on non-finite input).
+                            val inferredCell = if (result.energy.isFinite() && result.energy in 0f..1f) {
+                                prediction?.cell?.takeIf { it in 0..24 } ?: (result.valence?.takeIf { it.isFinite() && it in 0f..1f }
+                                    ?: AcousticMoodEstimate.estimate(result))?.let { value ->
+                                    MoodCoordinates.cell(value, result.energy)
+                                }
+                            } else null
+                            if(inferredCell!=null) {
+                                store.assign(song.id,inferredCell)
+                                assignmentsVersion++
+                                assigned++
+                            } else {
+                                readableUnclassified++
+                            }
+                        }
+                        else {
+                            groupedDuringAnalysis++
+                        }
+                        successes++
+                        analyzed=successes
+                    } else unreadable++
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        groupingFailures++
+                        android.util.Log.w("MusicSquareMood", "Mood grouping failed for track ${song.id}", error)
+                    }
+                }
+                analyzed=successes
+                moodAnalysisSummary="Finished: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures, $groupingFailures grouping/storage failures, $groupedDuringAnalysis grouped during analysis. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded)."
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                moodAnalysisSummary="Analysis cancelled: $assigned newly grouped, $classifiedAlready already grouped (skipped), $readableUnclassified readable but unclassified, $unreadable decode failures, $groupingFailures grouping/storage failures, $groupedDuringAnalysis grouped during analysis. $successes readable processed ($reusedCached cached, $decodedFresh freshly decoded) before cancellation."
+                throw cancelled
+            } finally { analysisProgress=null }
+        }
+    }
+
     MaterialTheme(colorScheme = darkColorScheme(primary=accent,background=bg,surface=surface)) {
         Scaffold(containerColor=bg, bottomBar={
             Column {
@@ -636,7 +804,7 @@ private fun PlayerApp(controller: MediaController?) {
                             Text(song.title,maxLines=1,overflow=TextOverflow.Ellipsis,color=ink)
                             Text(song.artist,fontSize=12.sp,color=muted,maxLines=1)
                         }
-                        IconButton(enabled=!tagBusy,onClick=editCurrentSongTags) {
+                        IconButton(enabled=!tagBusy && !tagReadBusy,onClick=editCurrentSongTags) {
                             Icon(Icons.Default.Edit,"Edit playing song tags",tint=accent)
                         }
                         IconButton(onClick={controller?.seekToPreviousMediaItem()}) {
@@ -647,9 +815,6 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         IconButton(onClick={controller?.seekToNextMediaItem()}) {
                             Icon(Icons.Default.SkipNext,"Next track",tint=ink)
-                        }
-                        IconButton(enabled=!tagBusy,onClick=editCurrentSongTags) {
-                            Icon(Icons.Default.Edit,"Edit playing song tags",tint=accent)
                         }
                     }
                     val miniDuration=(controller?.duration ?: 0L).coerceAtLeast(0L)
@@ -689,7 +854,9 @@ private fun PlayerApp(controller: MediaController?) {
                             Spacer(Modifier.width(8.dp))
                             Text("Browse your library")
                         }
-                        val unclassifiedCount=songs.count { store.cell(it.id)==null }
+                        val unclassifiedCount = remember(songs, assignmentsVersion) {
+                            songs.count { store.cell(it.id) !in 0..24 }
+                        }
                         if(unclassifiedCount>0) {
                             Spacer(Modifier.height(8.dp))
                             Text("$unclassifiedCount songs need acoustic grouping",color=accent,fontWeight=FontWeight.SemiBold)
@@ -785,64 +952,38 @@ private fun PlayerApp(controller: MediaController?) {
                         Text("MUSIC SQUARE",fontSize=13.sp,fontWeight=FontWeight.Bold,color=muted)
                         Text("Find your mood",fontSize=32.sp,fontWeight=FontWeight.Bold,color=ink)
                         Text("Energy →   •   Estimated mood ↑",color=muted,fontSize=13.sp)
-                         Text("${songs.size} scanned • ${songs.count { store.cell(it.id)!=null } + assignmentsVersion*0} classified • ${songs.count { store.cell(it.id)==null }} unclassified",color=muted,fontSize=12.sp)
-                        Button(enabled=allowed && songs.isNotEmpty() && analysisProgress==null,
-                            onClick={
-                                analysisJob=scope.launch {
-                                    analysisProgress="Starting offline analysis"
-                                    var successes=0
-                                    var assigned=0
-                                    var unreadable=0
-                                    var classifiedAlready=0
-                                    try {
-                                        val personalExamples = trainingStore.examples(songs,analysisStore)
-                                        songs.forEachIndexed { index,song ->
-                                            if(store.cell(song.id)!=null) return@forEachIndexed
-                                            kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if(!it.isActive) throw kotlinx.coroutines.CancellationException() }
-                                            analysisProgress="Analyzing ${index+1}/${songs.size}: ${song.title}"
-                                            val result=analysisStore.read(song.id,song.duration)
-                                                ?: analyzer.analyze(song.uri)?.also { analysisStore.save(song.id,song.duration,it) }
-                                            if(result!=null) {
-                                                if(store.cell(song.id)==null) {
-                                                    // User-trained supervised model abstains when evidence is insufficient.
-                                                    val prediction=PersonalMoodModel.predict(result.energy,result.bpm,personalExamples,song.id)
-                                                    // Never fabricate neutral valence: abstain unless a
-                                                    // supervised prediction or actual valence is available.
-                                                    val inferredCell=prediction?.cell ?: (result.valence ?: AcousticMoodEstimate.estimate(result))?.let { value ->
-                                                        MoodCoordinates.cell(value,result.energy.coerceIn(0f,1f))
-                                                    }
-                                                    if(inferredCell!=null) {
-                                                        store.assign(song.id,inferredCell)
-                                                        assignmentsVersion++
-                                                        assigned++
-                                                    }
-                                                }
-                                                else classifiedAlready++
-                                                successes++
-                                            } else unreadable++
-                                        }
-                                        analyzed=successes
-                                        analysisProgress="Finished: $assigned newly grouped, $classifiedAlready already grouped, $unreadable decode failures. $successes readable."
-                                        kotlinx.coroutines.delay(4500)
-                                    } finally { analysisProgress=null }
-                                }
-                            },modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
+                         val classifiedCount = remember(songs, assignmentsVersion) { songs.count { store.cell(it.id) in 0..24 } }
+                        val unclassifiedCount = songs.size - classifiedCount
+                        Text("${songs.size} scanned • $classifiedCount classified • $unclassifiedCount unclassified",color=muted,fontSize=12.sp)
+                        Button(enabled=allowed && !loading && songs.any { store.cell(it.id) !in 0..24 } && analysisProgress==null,
+                            onClick={ startMoodAnalysis() }
+                        ,modifier=Modifier.fillMaxWidth()) { Text("Analyze unclassified songs") }
                         analysisProgress?.let { progress ->
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
                                 TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel") }
                             }
                         }
-                        Text("Personal learning: ${trainingStore.exampleCount()} manual labels, ${trainingStore.examples(songs,analysisStore).size} with features. At least 5 diverse labels are needed.",color=muted,fontSize=11.sp)
+                        moodAnalysisSummary?.let { Text(it,color=muted,fontSize=12.sp) }
+                        Text("Personal learning: ${trainingStore.exampleCount()} manual labels. Cached features are checked off the UI thread when analysis starts; at least 5 diverse usable labels are needed.",color=muted,fontSize=11.sp)
                         Text("Automatic placements are acoustic listening groups, NOT verified happiness or emotion. If tempo is unavailable, readable songs are grouped by energy in the middle column. Unreadable files remain unclassified.",color=muted,fontSize=11.sp)
                         TextButton(onClick={trainingStore.clear();assignmentsVersion++}) { Text("Reset personal training labels") }
                         Spacer(Modifier.height(20.dp))
+                        // Read assignments once per grid refresh instead of querying persistent
+                        // storage 25 times per track on every recomposition.
+                        val moodCounts = remember(songs, assignmentsVersion) {
+                            IntArray(25).also { counts ->
+                                songs.forEach { song ->
+                                    store.cell(song.id)?.takeIf { it in 0..24 }?.let { counts[it]++ }
+                                }
+                            }
+                        }
                         Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
                             repeat(5) { row ->
                                 Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                                     repeat(5) { col ->
                                         val cell=row*5+col
-                                        val count=songs.count { store.cell(it.id)==cell } + (assignmentsVersion * 0)
+                                        val count=moodCounts[cell]
                                         Column(Modifier.weight(1f).height(58.dp)
                                             .background(palette[(col+row)%5].copy(alpha=if(selectedCell==cell)1f else .72f),RoundedCornerShape(10.dp))
                                             .clickable { selectedCell=cell },horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
@@ -939,34 +1080,27 @@ private fun PlayerApp(controller: MediaController?) {
                         }
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("${songs.size} local songs",color=muted,modifier=Modifier.weight(1f))
-                            TextButton(onClick={if(allowed)refresh() else request.launch(permission)}) { Text("Refresh") }
+                            TextButton(enabled=!loading && analysisProgress==null,onClick={if(allowed)refresh() else request.launch(permission)}) { Text("Refresh library only") }
                         }
                         if (!allowed) Button(onClick={request.launch(permission)}) { Text("Allow music access") }
                         OutlinedTextField(value=searchQuery,onValueChange={searchQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Search title, artist, album")},leadingIcon={Icon(Icons.Default.Search,null)})
                         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        TextButton(enabled=allowed && analysisProgress==null && songs.isNotEmpty(),onClick={
-                            analysisJob=scope.launch {
-                                val batch=songs.toList()
-                                analysisProgress="Analyzing local tracks…"
-                                analyzed=0
-                                try {
-                                    for ((index,song) in batch.withIndex()) {
-                                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                                        analysisProgress="Analyzing ${index+1}/${batch.size}: ${song.title}"
-                                        if (analysisStore.read(song.id,song.duration)==null) {
-                                            analyzer.analyze(song.uri)?.let {
-                                                analysisStore.save(song.id,song.duration,it)
-                                                analyzed++
-                                            }
-                                        }
-                                    }
-                                } finally {
-                                    analysisProgress=null
-                                }
+                        Button(enabled=allowed && !loading && analysisProgress==null, onClick={ refresh { startMoodAnalysis() } }, modifier=Modifier.fillMaxWidth()) { Text("Scan library + classify moods") }
+                        TextButton(enabled=allowed && !loading && analysisProgress==null && songs.any { store.cell(it.id) !in 0..24 },onClick={ startMoodAnalysis() }) { Text("Analyze audio + group on mood grid") }
+                        analysisProgress?.let { progress ->
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text(progress,color=accent,fontSize=12.sp,modifier=Modifier.weight(1f))
+                                TextButton(onClick={analysisJob?.cancel()}) { Text("Cancel analysis") }
                             }
-                        }) { Text("Analyze BPM + energy offline") }
-                        analysisProgress?.let { Text(it,color=accent,fontSize=12.sp) }
-                        if (analyzed>0) Text("$analyzed songs analyzed",color=muted,fontSize=12.sp)
+                        }
+                        if (songs.isNotEmpty()) {
+                            // SharedPreferences is not observable Compose state: refresh counts after assigning.
+                            val groupedCount = remember(songs, assignmentsVersion) {
+                                songs.count { store.cell(it.id) in 0..24 }
+                            }
+                            Text("${songs.size} scanned • $groupedCount grouped • ${songs.size - groupedCount} unclassified",color=muted,fontSize=12.sp)
+                        }
+                        moodAnalysisSummary?.let { Text(it,color=muted,fontSize=12.sp) }
                         error?.let { Text(it,color=Color(0xFFFF9C9C)) }
                         val filtered=songs.filter { song ->
                             (searchQuery.isBlank() || listOf(song.title,song.artist,song.album,song.folder,song.genre).any { normalizeLibraryText(it).contains(normalizeLibraryText(searchQuery)) }) && (searchQuery.isNotBlank() || when(grouping) {
@@ -977,7 +1111,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 "Year" -> selectedGroup=="All" || song.year.toString()==selectedGroup
                                 "Favorites" -> favorites.getBoolean(song.id.toString(),false)
                                 "Energetic","Relaxed","Fast tempo","Unanalyzed" ->
-                                    com.musicsquare.player.data.SmartLibraryFilters.matches(grouping,analysisStore.read(song.id,song.duration))
+                                    com.musicsquare.player.data.SmartLibraryFilters.matches(grouping,analysisStore.read(song.id, song.modified))
                                 "Playlists" -> selectedGroup=="All" || extras.playlist(selectedGroup).contains(song.id)
                                 else -> true
                             })
@@ -1014,7 +1148,7 @@ private fun PlayerApp(controller: MediaController?) {
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(song.title,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                        Text("${song.artist} • ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id,song.duration)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
+                                        Text("${song.artist} • ${store.cell(song.id)?.takeIf { it in names.indices }?.let { names[it] } ?: "Unclassified"} • ${analysisStore.read(song.id, song.modified)?.bpm?.toInt()?.let { "$it BPM" } ?: "BPM unknown"}",fontSize=12.sp,color=muted,maxLines=1)
                                     }
                                     IconButton(onClick={
                                         val key=song.id.toString()
@@ -1069,7 +1203,16 @@ private fun PlayerApp(controller: MediaController?) {
                         Spacer(Modifier.height(8.dp))
                         Text(current?.title ?: "No song selected",fontSize=20.sp,fontWeight=FontWeight.Bold,color=ink,maxLines=2)
                         Text(current?.artist ?: "Choose music from your library",color=muted)
-                        OutlinedButton(enabled=current!=null && !tagBusy,onClick=editCurrentSongTags) { Icon(Icons.Default.Edit,"Edit tags",tint=ink) }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled=current!=null && !tagBusy && !tagReadBusy,onClick=editCurrentSongTags) {
+                                Icon(Icons.Default.Edit,contentDescription=null,tint=ink)
+                                Text(" Edit song tags")
+                            }
+                            OutlinedButton(enabled=current!=null,onClick={current?.let { assignSong=it }}) {
+                                Icon(Icons.Default.GridView,contentDescription=null,tint=ink)
+                                Text(" Assign mood")
+                            }
+                        }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
                             var sleepMenuExpanded by remember { mutableStateOf(false) }
                             Box {
@@ -1171,7 +1314,7 @@ private fun PlayerApp(controller: MediaController?) {
                             OutlinedTextField(value=manualLyrics,onValueChange={manualLyrics=it},label={Text("Paste or edit lyrics")},modifier=Modifier.fillMaxWidth())
                             TextButton(onClick={current?.let { song -> lyricsRepository.savePlain(song.title,song.artist,song.duration,manualLyrics);lyrics=lyricsRepository.saved(song.title,song.artist,song.duration);lyricsMessage="Lyrics saved offline" }}) { Text("Save manual lyrics") }
                         }
-                        current?.let { song -> Text("Mood: ${store.cell(song.id)?.let { names[it] } ?: "Unclassified"}",color=muted) }
+                        current?.let { song -> Text("Mood: ${store.cell(song.id)?.takeIf { it in names.indices }?.let { names[it] } ?: "Unclassified"}",color=muted) }
                     }
                     "Tools" -> {
                         Text("Audio Studio",fontSize=30.sp,fontWeight=FontWeight.Bold,color=ink)
@@ -1222,14 +1365,14 @@ private fun PlayerApp(controller: MediaController?) {
                             }
                             if(studioPage=="Tag Editor") {
                             Text("Batch tag editor • MP3, FLAC, WAV, OGG, M4A",color=accent,fontWeight=FontWeight.Bold)
-                            OutlinedButton(onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
+                            OutlinedButton(enabled=!tagBusy && !tagReadBusy,onClick={tagPicker.launch(arrayOf("audio/*","application/ogg","application/octet-stream"))}) { Text("Select audio files") }
                             Text("${selectedTagUris.size} selected",color=muted)
                             OutlinedButton(enabled=selectedTagUris.size==1 && !tagBusy && !tagReadBusy,onClick={
                                 val uri=selectedTagUris.singleOrNull() ?: return@OutlinedButton
                                 scope.launch {
                                     tagReadBusy=true
                                     try {
-                                        val current=tagInspector.read(uri)
+                                        val current=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { tagInspector.read(uri) }
                                         tagTitle=current.title.orEmpty()
                                         tagArtist=current.artist.orEmpty()
                                         tagAlbum=current.album.orEmpty()
@@ -1248,15 +1391,15 @@ private fun PlayerApp(controller: MediaController?) {
                                 Text(if(tagReadBusy)"Reading tags..." else "Load existing tags (single file)")
                             }
 
-                            OutlinedTextField(value=tagTitle,onValueChange={tagTitle=it},label={Text("Title (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagArtist,onValueChange={tagArtist=it},label={Text("Artist")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagYear,onValueChange={tagYear=it},label={Text("Year")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagGenre,onValueChange={tagGenre=it},label={Text("Genre")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagTrack,onValueChange={tagTrack=it},label={Text("Track number (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=tagComment,onValueChange={tagComment=it},label={Text("Comment (blank = unchanged)")},modifier=Modifier.fillMaxWidth(),minLines=2)
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagTitle,onValueChange={tagTitle=it},label={Text("Title (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagArtist,onValueChange={tagArtist=it},label={Text("Artist")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagAlbum,onValueChange={tagAlbum=it},label={Text("Album")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagYear,onValueChange={tagYear=it},label={Text("Year")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagGenre,onValueChange={tagGenre=it},label={Text("Genre")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagTrack,onValueChange={tagTrack=it},label={Text("Track number (blank = unchanged)")},modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(enabled=!tagReadBusy && !tagBusy,value=tagComment,onValueChange={tagComment=it},label={Text("Comment (blank = unchanged)")},modifier=Modifier.fillMaxWidth(),minLines=2)
                             Text("Batch editing changes the selected original files. Back up important recordings first.",color=muted,fontSize=12.sp)
-                            Button(enabled=!tagBusy && selectedTagUris.isNotEmpty(),onClick={
+                            Button(enabled=!tagBusy && !tagReadBusy && selectedTagUris.isNotEmpty(),onClick={
                                 scope.launch {
                                     tagBusy=true
                                     val results=tagEditor.writeBatch(selectedTagUris,TagChanges(
@@ -1504,7 +1647,7 @@ private fun PlayerApp(controller: MediaController?) {
                                 }
                             }
                     ) {
-                        val danceAnalysis=current?.let { analysisStore.read(it.id,it.duration) }
+                        val danceAnalysis=current?.let { analysisStore.read(it.id,it.modified) }
                         DancingCompanion(
                             playing=playing,
                             onDismiss={dancerVisible=false},
